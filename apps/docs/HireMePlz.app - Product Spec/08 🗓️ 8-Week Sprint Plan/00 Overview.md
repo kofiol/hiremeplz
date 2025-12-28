@@ -17,7 +17,7 @@
 ## 🧱 Repo constraints (hard)
 - Monorepo using `pnpm` + Turborepo.
 - One Next.js app provides:
-  - UI under `/app/*`
+  - UI under `/(app)/*`
   - REST API under `/api/v1/*`
 - Shared packages for:
   - DB types + Supabase clients
@@ -34,4 +34,3 @@
 ## 🔥 Rule of execution
 - If something is uncertain, implement the simplest version that satisfies canonical schemas and upgrade later.
 - Always keep Supabase canonical data clean; avoid “temporary tables”.
-

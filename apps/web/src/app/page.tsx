@@ -20,7 +20,7 @@ export default function Home() {
         />
         <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
           <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+            hireMePlz
           </h1>
           <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
             {isLoading && "Checking your session..."}
@@ -35,7 +35,7 @@ export default function Home() {
             <>
               {session ? (
                 <Link
-                  href="/app/overview"
+                  href="/overview"
                   className="flex h-12 w-full items-center justify-center rounded-full bg-zinc-950 px-5 text-zinc-50 transition-colors hover:bg-zinc-800 md:w-[180px]"
                 >
                   Go to dashboard

@@ -8,7 +8,7 @@
 
 ## ✅ Deliverables
 - [ ] Team endpoints implemented (`/api/v1/team/*`).
-- [ ] Team UI in `/app/team`.
+- [ ] Team UI in `/team`.
 - [ ] Usage counters implemented + enforced in API.
 - [ ] Stripe webhook endpoint updates `profiles.plan`.
 - [ ] Copilot agent implemented using OpenAI Agents SDK tools calling read-only REST.

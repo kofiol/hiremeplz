@@ -8,8 +8,8 @@
 ## ✅ Deliverables
 - [ ] Mailgun inbound route → backend webhook → Trigger.dev event.
 - [ ] `email_ingest.mailgun` workflow implemented.
-- [ ] `/app/messages` inbox UI.
-- [ ] `/app/feedback` list UI with resolve action.
+- [ ] `/messages` inbox UI.
+- [ ] `/feedback` list UI with resolve action.
 
 ## 🧪 Acceptance criteria
 - [ ] Sending a test email produces a `messages` row.

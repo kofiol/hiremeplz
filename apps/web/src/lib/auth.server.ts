@@ -9,11 +9,15 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error("Missing required server-side Supabase env vars");
 }
 
+const supabaseUrl = SUPABASE_URL;
+const supabaseAnonKey = SUPABASE_ANON_KEY;
+const supabaseServiceRoleKey = SUPABASE_SERVICE_ROLE_KEY;
+
 // 1. Service Role Client (Bypasses RLS)
 // Only use this when you absolutely need admin privileges.
 export const supabaseAdmin = createClient(
-  SUPABASE_URL,
-  SUPABASE_SERVICE_ROLE_KEY,
+  supabaseUrl,
+  supabaseServiceRoleKey,
   {
     auth: {
       autoRefreshToken: false,
@@ -34,7 +38,7 @@ export async function verifyAuth(authHeader: string | null): Promise<AuthContext
   }
 
   try {
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: {
         headers: {
           Authorization: authHeader,

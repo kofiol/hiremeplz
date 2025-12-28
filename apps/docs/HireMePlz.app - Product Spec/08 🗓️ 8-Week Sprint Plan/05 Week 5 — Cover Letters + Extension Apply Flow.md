@@ -8,12 +8,12 @@
 ## ✅ Deliverables
 - [ ] Trigger.dev `cover_letter.generate` workflow implemented.
 - [ ] `POST /api/v1/cover-letters/generate` triggers workflow.
-- [ ] `/app/jobs/[jobId]` has “Generate cover letter” and shows versions.
+- [ ] `/jobs/[jobId]` has “Generate cover letter” and shows versions.
 - [ ] `apply_sessions` endpoints implemented.
 - [ ] Minimal Chrome extension MVP that injects into Upwork + LinkedIn textareas.
 
 ## 🧪 Acceptance criteria
-- [ ] 1 click generates a cover letter and it appears in `/app/cover-letters`.
+- [ ] 1 click generates a cover letter and it appears in `/cover-letters`.
 - [ ] Regenerations create new rows (version history).
 - [ ] Apply session token expires and cannot be reused.
 - [ ] On supported pages, extension injects the latest cover letter text.

@@ -9,13 +9,13 @@
 ## ✅ Deliverables
 - [ ] Turborepo monorepo scaffold with `apps/web` (Next.js App Router).
 - [ ] Shared packages (`packages/*`) created only where reused.
-- [ ] Auth screens: `/login`, `/app/*` guarded.
+- [ ] Auth screens: `/login`, `/(app)/*` guarded.
 - [ ] Backend auth middleware for `/api/v1/*`.
 - [ ] Minimal `GET /api/v1/health` and `GET /api/v1/me`.
 
 ## 🧪 Acceptance criteria
 - [ ] `pnpm dev` starts the app and hot reload works.
-- [ ] User can request magic link, click it, land in `/app/overview`.
+- [ ] User can request magic link, click it, land in `/overview`.
 - [ ] Unauthed request to `GET /api/v1/me` returns `401`.
 - [ ] Authed request to `GET /api/v1/me` returns `user_id` + `team_id`.
 
@@ -30,7 +30,7 @@
 - [ ] Create Supabase project + configure Auth (email magic link).
 - [ ] Add Supabase client wiring in the app.
 - [ ] Implement `/login` flow + session persistence.
-- [ ] Add protected layout for `/app/*`.
+- [ ] Add protected layout for `/(app)/*`.
 
 ### Day 5 — REST API auth gate
 - [ ] Create `/api/v1/*` route handlers.

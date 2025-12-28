@@ -6,7 +6,7 @@
 - [ ] MVP is stable enough for first paying users.
 
 ## ✅ Deliverables
-- [ ] Interview prep UI in `/app/interview-prep`.
+- [ ] Interview prep UI in `/interview-prep`.
 - [ ] Backend endpoint returns voice session parameters.
 - [ ] Trigger.dev post-session analysis workflow writes results.
 - [ ] Upwork profile optimizer workflow implemented.

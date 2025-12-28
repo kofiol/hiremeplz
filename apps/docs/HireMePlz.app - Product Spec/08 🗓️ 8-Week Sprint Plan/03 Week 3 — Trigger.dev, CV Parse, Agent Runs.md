@@ -31,7 +31,7 @@
 
 ### Day 5 — Realtime progress
 - [ ] Subscribe UI to `agent_runs` and `agent_run_steps`.
-- [ ] Add progress panel to `/app/overview`.
+- [ ] Add progress panel to `/overview`.
 
 ### Weekend — Hardening
 - [ ] Add retries + failure states that land in `agent_runs.error_text`.

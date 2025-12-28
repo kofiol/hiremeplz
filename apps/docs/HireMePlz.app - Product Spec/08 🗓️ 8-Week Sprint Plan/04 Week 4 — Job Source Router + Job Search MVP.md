@@ -10,7 +10,7 @@
 - [ ] Job Source Router module with provider adapters.
 - [ ] Trigger.dev `job_search.run` workflow implemented end-to-end.
 - [ ] `GET /api/v1/jobs` and `GET /api/v1/jobs/:id` implemented.
-- [ ] `/app/jobs` list + `/app/jobs/[jobId]` details implemented.
+- [ ] `/jobs` list + `/jobs/[jobId]` details implemented.
 
 ## 🧪 Acceptance criteria
 - [ ] Triggering job search creates an `agent_runs` row with step updates.
@@ -36,7 +36,7 @@
 
 ### Day 5 — UI + API
 - [ ] Build `GET /api/v1/jobs` with filters (platform, min_score, q).
-- [ ] Render `/app/jobs` shortlist with filters.
+- [ ] Render `/jobs` shortlist with filters.
 - [ ] Render job detail view with breakdown explanation.
 
 ### Weekend — Quality pass

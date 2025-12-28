@@ -10,7 +10,7 @@
 - [ ] SQL migration(s) applied in Supabase for the canonical schema.
 - [ ] RLS helper functions + policies applied.
 - [ ] Storage buckets created (CV uploads + snapshots).
-- [ ] `/app/onboarding` flow implemented.
+- [ ] `/onboarding` flow implemented.
 - [ ] `GET/POST/PATCH /api/v1/settings` (reads/writes `user_preferences` and `user_agent_settings`).
 
 ## 🧪 Acceptance criteria
@@ -25,7 +25,7 @@
 - [ ] Create Storage buckets and storage policies for CV uploads.
 
 ### Day 3–4 — Onboarding UI
-- [ ] Build `/app/onboarding` steps (CV upload, skills/experience, preferences).
+- [ ] Build `/onboarding` steps (CV upload, skills/experience, preferences).
 - [ ] Implement backend endpoints to persist onboarding data.
 - [ ] Compute `profile_completeness_score` server-side on save.
 

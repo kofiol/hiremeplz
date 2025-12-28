@@ -24,6 +24,5 @@ Defined `notifications.type` values:
 `notifications.payload` must include:
 - `title`
 - `body`
-- `deep_link` (e.g. `/app/jobs/<id>`)
+- `deep_link` (e.g. `/jobs/<id>`)
 - `severity` (`info|warning|critical`)
-
