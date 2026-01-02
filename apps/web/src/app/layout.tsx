@@ -18,6 +18,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "HireMePlz",
   description: "Your personal AI agent for finding freelance projects",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({
