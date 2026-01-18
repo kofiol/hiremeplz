@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import { ThemeToggle } from "@/components/theme-toggle"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 function parseFragmentParams(fragment: string) {
@@ -118,9 +117,6 @@ export default function AuthCallbackPage() {
   if (status === "error") {
     return (
       <div className="relative flex min-h-screen items-center justify-center bg-background p-4">
-        <div className="absolute right-4 top-4">
-          <ThemeToggle />
-        </div>
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle>Sign in failed</CardTitle>
@@ -135,9 +131,6 @@ export default function AuthCallbackPage() {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center bg-background p-4">
-      <div className="absolute right-4 top-4">
-        <ThemeToggle />
-      </div>
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Completing sign in</CardTitle>

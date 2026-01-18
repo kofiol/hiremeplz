@@ -1,25 +1,53 @@
+"use client";
+
 import type { ReactNode } from "react";
+import { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Sparkles, Menu } from "lucide-react";
+import { Sparkles, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ThemeToggle } from "@/components/theme-toggle";
 
 type MarketingLayoutProps = {
   children: ReactNode;
 };
 
 export default function MarketingLayout({ children }: MarketingLayoutProps) {
+  const pathname = usePathname();
+  const [isAnnouncementOpen, setIsAnnouncementOpen] = useState(true);
+
   const siteMode =
     process.env.NEXT_PUBLIC_HIREMEPLZ_SITE_MODE ??
     (process.env.NODE_ENV === "production" ? "landing" : "full");
   const isFullMode = siteMode === "full";
+  const isAnnouncementVisible = pathname === "/" && isAnnouncementOpen;
 
   return (
     <div className="flex min-h-screen flex-col bg-background font-sans text-foreground selection:bg-purple-500/30">
-      <header className="fixed inset-x-0 top-0 z-50">
+      {isAnnouncementVisible ? (
+        <div className="fixed inset-x-0 top-0 z-[60] h-9 bg-green-500 text-black">
+          <div className="container mx-auto flex h-9 items-center justify-between px-4 md:px-6">
+            <Link
+              href="https://bags.fm/EDYaRCTnzdVKqaVKrfTZQ6nvoXtwQaMihf1yNTRkBAGS"
+              className="truncate text-sm font-medium underline underline-offset-2 hover:opacity-90"
+            >
+              Support this project and it&apos;s founder by trading the official token on <span className="text-white">BAGS.FM</span> -{">"}
+            </Link>
+            <button
+              type="button"
+              aria-label="Close announcement"
+              onClick={() => setIsAnnouncementOpen(false)}
+              className="ml-3 inline-flex h-7 w-7 flex-none items-center justify-center rounded hover:bg-black/10"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <header className={cn("fixed inset-x-0 z-50 transition-[top] duration-200", isAnnouncementVisible ? "top-9" : "top-0")}>
         <div className="container mx-auto px-4 pt-4 md:px-6">
           <div className="flex h-16 items-center justify-between rounded-2xl border border-border/60 bg-background/95 px-4 shadow-sm md:px-6">
             <Link href="/" className="flex items-center gap-2 transition-opacity hover:opacity-80">
@@ -34,7 +62,6 @@ export default function MarketingLayout({ children }: MarketingLayoutProps) {
             </nav>
 
             <div className="flex items-center gap-2">
-              <ThemeToggle className="rounded-full" />
               <Sheet>
                 <SheetTrigger asChild>
                   <Button variant="ghost" size="icon" className="md:hidden rounded-full">

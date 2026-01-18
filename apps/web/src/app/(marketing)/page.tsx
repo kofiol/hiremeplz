@@ -163,7 +163,11 @@ export default function LandingPage() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                <Button size="lg" className="text-base sm:text-lg px-7 sm:px-8 py-6 rounded-full transition-all shadow-sm hover:shadow-md" asChild>
+                <Button
+                  size="lg"
+                  className="text-base sm:text-lg px-7 sm:px-8 py-6 rounded-full transition-all shadow-sm hover:shadow-md"
+                  asChild
+                >
                   <Link href="https://forms.gle/RYhbUrwwxhWn1dwS9">
                     Get early access <ArrowRight className="ml-2 h-5 w-5" />
                   </Link>
@@ -192,7 +196,7 @@ export default function LandingPage() {
                       <span className="font-mono font-medium">142</span>
                     </div>
                     <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                      <div className="h-full bg-primary w-[85%] animate-pulse"></div>
+                      <div className="h-full bg-white w-[85%] animate-pulse"></div>
                     </div>
                   </div>
                   <div className="space-y-3">
@@ -657,14 +661,14 @@ export default function LandingPage() {
             </p>
           </Reveal>
           
-          <Reveal delayMs={200} className="bg-background p-6 sm:p-8 rounded-2xl shadow-xl border max-w-md mx-auto">
+          <Reveal delayMs={200} className="bg-background p-6 sm:p-8 rounded-[1rem] shadow-xl border max-w-md mx-auto">
              <div className="space-y-4">
 
                <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
                  <div className="space-y-2 text-left">
                   
                  </div>
-<Button asChild className="w-full text-lg py-6" size="lg">
+<Button asChild className="w-full text-lg py-6 rounded-[1rem]" size="lg">
   <a
     href="https://forms.gle/RYhbUrwwxhWn1dwS9"
     target="_blank"

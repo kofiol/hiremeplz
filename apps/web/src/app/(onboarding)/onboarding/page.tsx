@@ -530,7 +530,7 @@ function SkillsSection() {
               key={skill.id}
               type="button"
               onClick={() => handleRemoveSkill(skill.id)}
-              className="border-input hover:border-destructive/60 hover:bg-destructive/5 inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs"
+              className="border-input hover:border-destructive/60 hover:bg-destructive/5 inline-flex items-center gap-1 rounded-3xl border px-3 py-1 text-xs"
             >
               <span>{skill.name}</span>
               <span className="text-muted-foreground">×</span>

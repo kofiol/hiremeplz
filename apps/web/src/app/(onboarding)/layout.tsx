@@ -4,7 +4,6 @@ import type { ReactNode } from "react"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useSession } from "../auth/session-provider"
-import { ThemeToggle } from "@/components/theme-toggle"
 
 type OnboardingLayoutProps = {
   children: ReactNode
@@ -62,9 +61,6 @@ export default function OnboardingLayout({ children }: OnboardingLayoutProps) {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center bg-background p-4">
-      <div className="absolute right-4 top-4">
-        <ThemeToggle />
-      </div>
       <main className="w-full max-w-3xl rounded-xl border bg-card p-6 shadow-sm">
         {children}
       </main>
