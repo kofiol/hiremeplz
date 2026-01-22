@@ -476,8 +476,11 @@ export default function OnboardingPage() {
               <ConversationScrollButton />
             </Conversation>
 
-            <div className="shrink-0 border-t bg-muted px-4 py-4">
-              <PromptInput onSubmit={handleSubmit} className="mx-auto max-w-2xl">
+            <div className="shrink-0 bg-muted px-4 pb-10 pt-4">
+              <PromptInput
+                onSubmit={handleSubmit}
+                className="mx-auto max-w-2xl [&_[data-slot=input-group]]:bg-transparent [&_[data-slot=input-group]]:border-transparent [&_[data-slot=input-group]]:shadow-none [&_[data-slot=input-group]]:rounded-none"
+              >
                 <PromptInputBody>
                   <PromptInputTextarea
                     ref={textareaRef}
