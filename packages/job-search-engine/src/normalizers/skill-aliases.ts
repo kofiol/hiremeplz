@@ -646,12 +646,8 @@ export function toCanonicalSkillName(skillName: string): string {
  */
 export function getSkillDisplayName(canonicalName: string): string {
   const aliases = SKILL_ALIASES[canonicalName];
-  if (aliases && aliases.length > 0) {
-    // Return a properly capitalized version
-    // The first alias is typically the most common form
-    return capitalizeSkillName(aliases[0]);
-  }
-  return capitalizeSkillName(canonicalName);
+  const firstAlias = aliases?.[0];
+  return capitalizeSkillName(firstAlias ?? canonicalName);
 }
 
 /**
