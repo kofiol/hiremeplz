@@ -31,10 +31,6 @@ import {
   type SearchSpecCacheStorage,
 } from "./cache.js";
 
-// #region agent log
-fetch('http://127.0.0.1:7242/ingest/25d17162-8518-4d3a-ad84-ff94ccaf2f34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent.ts:INIT',message:'Agent module loaded',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2-module-load'})}).catch(()=>{});
-// #endregion
-
 // ============================================================================
 // AGENT CONFIGURATION
 // ============================================================================
@@ -79,11 +75,7 @@ export interface GenerateSearchSpecResult {
  * Creates the OpenAI Agent for search spec generation.
  * Agent uses structured output with Zod schema.
  */
-function createSearchSpecAgent(model: string = DEFAULT_MODEL) {
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/25d17162-8518-4d3a-ad84-ff94ccaf2f34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent.ts:createSearchSpecAgent',message:'Creating agent',data:{model},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2-agent-create'})}).catch(()=>{});
-  // #endregion
-  
+function createSearchSpecAgent(model: string = DEFAULT_MODEL): Agent<typeof SearchSpecLLMOutputSchema> {
   return new Agent({
     name: "SearchSpecGenerator",
     instructions: SEARCH_SPEC_SYSTEM_PROMPT,
@@ -212,7 +204,7 @@ function serializeProfileForLLM(profile: NormalizedProfile): string {
  * - Retry-safe (can be called multiple times)
  */
 export class SearchSpecAgent {
-  private agent: ReturnType<typeof createSearchSpecAgent>;
+  private agent: Agent<typeof SearchSpecLLMOutputSchema>;
   private cache: SearchSpecCache;
   private cacheTtlSeconds?: number;
   private maxRetries: number;
@@ -269,29 +261,17 @@ export class SearchSpecAgent {
         const profileJson = serializeProfileForLLM(profile);
         const userMessage = formatUserMessage(profileJson);
 
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/25d17162-8518-4d3a-ad84-ff94ccaf2f34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent.ts:generate:before-run',message:'About to run agent',data:{attempt,profileVersion:profile.profile_version},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3-run-call'})}).catch(()=>{});
-        // #endregion
-
         const result = await run(this.agent, userMessage);
-
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/25d17162-8518-4d3a-ad84-ff94ccaf2f34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent.ts:generate:after-run',message:'Agent run completed',data:{hasFinalOutput:!!result.finalOutput,finalOutputType:typeof result.finalOutput,finalOutputKeys:result.finalOutput && typeof result.finalOutput === 'object' ? Object.keys(result.finalOutput as object) : []},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3-run-result'})}).catch(()=>{});
-        // #endregion
 
         if (!result.finalOutput) {
           throw new Error("Agent returned no output");
         }
 
-        // Output is already validated by the agent's outputType - cast to expected type
-        llmOutput = result.finalOutput as SearchSpecLLMOutput;
+        // Output is already validated by the agent's outputType
+        llmOutput = result.finalOutput;
         break;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
-
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/25d17162-8518-4d3a-ad84-ff94ccaf2f34',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent.ts:generate:error',message:'Agent run error',data:{attempt,error:lastError.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3-run-error'})}).catch(()=>{});
-        // #endregion
 
         // Don't retry on last attempt
         if (attempt === this.maxRetries) {
