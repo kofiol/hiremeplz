@@ -1,1 +1,1 @@
-this repository is archived
+# hiremeplz.app - Your personal AI agent for finding freelance work!

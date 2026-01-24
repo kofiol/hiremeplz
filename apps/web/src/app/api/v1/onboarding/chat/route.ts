@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { Agent, run } from "@openai/agents";
 import { z } from "zod";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 
 // ============================================================================
 // Zod Schema for Collected Onboarding Data
@@ -228,6 +230,47 @@ const RequestSchema = z.object({
   collectedData: CollectedDataSchema.partial(),
 });
 
+function readEnvLocalValue(key: string) {
+  try {
+    const envPath = path.join(process.cwd(), ".env.local");
+    if (!existsSync(envPath)) {
+      return null;
+    }
+
+    const lines = readFileSync(envPath, "utf8").split(/\r?\n/);
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) {
+        continue;
+      }
+
+      const separatorIndex = trimmed.indexOf("=");
+      if (separatorIndex === -1) {
+        continue;
+      }
+
+      const currentKey = trimmed.slice(0, separatorIndex).trim();
+      if (currentKey !== key) {
+        continue;
+      }
+
+      let value = trimmed.slice(separatorIndex + 1).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+
+      return value || null;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 // ============================================================================
 // Agent Instructions
 // ============================================================================
@@ -300,6 +343,27 @@ export async function POST(request: NextRequest) {
     }
 
     const { message, conversationHistory, collectedData } = parsed.data;
+
+    // Verify API key is configured
+    const apiKey =
+      readEnvLocalValue("OPENAI_API_KEY") ?? process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      console.error("OPENAI_API_KEY is not configured in environment");
+      console.error("Available env vars:", Object.keys(process.env).filter(k => k.includes('OPENAI')));
+      return Response.json(
+        {
+          error: {
+            code: "configuration_error",
+            message: "OpenAI API key is not configured. Please restart the dev server after setting OPENAI_API_KEY in .env.local",
+          },
+        },
+        { status: 500 }
+      );
+    }
+
+    // Set the API key in the environment for the OpenAI Agents SDK
+    // The SDK reads from process.env.OPENAI_API_KEY
+    process.env.OPENAI_API_KEY = apiKey;
 
     // Build conversation context
     const contextMessage = `

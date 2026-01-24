@@ -17,11 +17,6 @@ type MarketingLayoutProps = {
 export default function MarketingLayout({ children }: MarketingLayoutProps) {
   const pathname = usePathname();
   const [isAnnouncementOpen, setIsAnnouncementOpen] = useState(true);
-
-  const siteMode =
-    process.env.NEXT_PUBLIC_HIREMEPLZ_SITE_MODE ??
-    (process.env.NODE_ENV === "production" ? "landing" : "full");
-  const isFullMode = siteMode === "full";
   const isAnnouncementVisible = pathname === "/" && isAnnouncementOpen;
 
   return (
@@ -90,16 +85,14 @@ export default function MarketingLayout({ children }: MarketingLayoutProps) {
                     </SheetClose>
                   </div>
                   <div className="mt-auto flex flex-col gap-2 p-4">
-                    {isFullMode ? (
-                      <SheetClose asChild>
-                        <Link
-                          href="/login"
-                          className={cn(buttonVariants({ variant: "outline", className: "w-full rounded-full" }))}
-                        >
-                          Log in
-                        </Link>
-                      </SheetClose>
-                    ) : null}
+                    <SheetClose asChild>
+                      <Link
+                        href="/login"
+                        className={cn(buttonVariants({ variant: "outline", className: "w-full rounded-full" }))}
+                      >
+                        Log in
+                      </Link>
+                    </SheetClose>
                     <SheetClose asChild>
                       <Link
                         href="#waitlist"
@@ -115,14 +108,12 @@ export default function MarketingLayout({ children }: MarketingLayoutProps) {
                   </div>
                 </SheetContent>
               </Sheet>
-              {isFullMode ? (
-                <Link
-                  href="/login"
-                  className="hidden md:block text-sm font-medium text-muted-foreground hover:text-foreground px-4"
-                >
-                  Log in
-                </Link>
-              ) : null}
+              <Link
+                href="/login"
+                className="hidden md:block text-sm font-medium text-muted-foreground hover:text-foreground px-4"
+              >
+                Log in
+              </Link>
 
               <Button size="sm" className="rounded-full" asChild>
                 <Link href="#waitlist">

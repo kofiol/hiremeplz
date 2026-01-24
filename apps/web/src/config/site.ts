@@ -1,7 +1,6 @@
 export const siteConfig = {
   name: "hireMePlz",
-  getStartedUrl:
-    process.env.NEXT_PUBLIC_HIREMEPLZ_SITE_MODE === "full" ? "/login" : "#waitlist",
+  getStartedUrl: "/login",
   links: {
     github: "https://github.com",
   },
