@@ -6,11 +6,14 @@ import { useSession } from "../../auth/session-provider";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { OnboardingChatbot } from "@/components/onboarding-chatbot";
 
 export default function OverviewPage() {
   const { session, isLoading } = useSession();
   const router = useRouter();
   const [isGuardChecked, setIsGuardChecked] = useState(false);
+  const [profileCompleteness, setProfileCompleteness] = useState<number>(0);
+  const [isCheckingCompleteness, setIsCheckingCompleteness] = useState(true);
 
   useEffect(() => {
     async function guardOverview() {
@@ -31,6 +34,7 @@ export default function OverviewPage() {
 
         if (!response.ok) {
           setIsGuardChecked(true);
+          setIsCheckingCompleteness(false);
           return;
         }
 
@@ -40,17 +44,30 @@ export default function OverviewPage() {
             ? payload.profile_completeness_score
             : 0;
 
-        void completeness;
+        setProfileCompleteness(completeness);
       } finally {
         setIsGuardChecked(true);
+        setIsCheckingCompleteness(false);
       }
     }
 
     guardOverview();
   }, [isLoading, session, router]);
 
-  if (!isGuardChecked) {
-    return null;
+  if (!isGuardChecked || isCheckingCompleteness) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <span className="size-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <span>Loading...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // If profile is incomplete (< 80%), show the onboarding chatbot
+  if (profileCompleteness < 0.8) {
+    return <OnboardingChatbot />;
   }
 
   return (

@@ -1,14 +1,5 @@
 # Agents Guide • hiremeplz.app
 
-## Tech Stack
-- **Frontend:** Next.js (App Router), React  
-- **Language & Modules:** TypeScript, ESM modules  
-- **Monorepo & Package Management:** pnpm + Turborepo  
-- **UI & Styling:** Tailwind CSS, shadcn/ui, Radix UI  
-- **State & Data:** Redux Toolkit, TanStack Table  
-- **AI & Automation:** OpenAI Agents SDK, trigger.dev  
-- **Testing & Quality:** Vitest, ESLint (flat config), Prettier  
-
 ## Dev environment tips
 - Start the web app: `cd apps/web; pnpm dev`  
 - Build everything: `pnpm build`  

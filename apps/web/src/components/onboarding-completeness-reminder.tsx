@@ -15,7 +15,8 @@ export function OnboardingCompletenessReminder() {
     if (isLoading) return
     const token = session?.access_token
     if (!token) return
-    if (pathname.startsWith("/onboarding")) return
+    // Don't show reminder on onboarding pages or overview (where onboarding is now integrated)
+    if (pathname.startsWith("/onboarding") || pathname.startsWith("/overview")) return
     if (hasRunRef.current) return
     hasRunRef.current = true
 
@@ -45,7 +46,7 @@ export function OnboardingCompletenessReminder() {
             closeButton: true,
             action: {
               label: "Continue",
-              onClick: () => router.push("/onboarding"),
+              onClick: () => router.push("/overview"),
             },
           })
         } else {
