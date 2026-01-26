@@ -2,9 +2,10 @@
 
 import * as React from "react"
 import { useCallback, useState, useRef, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import Image from "next/image"
 import { AnimatePresence, motion } from "framer-motion"
 import { useSession } from "@/app/auth/session-provider"
+import { useUserPlan } from "@/hooks/use-user-plan"
 import {
   Conversation,
   ConversationContent,
@@ -163,10 +164,29 @@ function transformToOnboardingPayload(data: CollectedData) {
 // ============================================================================
 
 export function OnboardingChatbot() {
-  const router = useRouter()
   const { session } = useSession()
+  const { displayName: planDisplayName } = useUserPlan()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const editTextareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Resolve user name
+  const userName = React.useMemo(() => {
+    const metaName =
+      (session?.user?.user_metadata?.full_name as string | undefined) ??
+      (session?.user?.user_metadata?.name as string | undefined) ??
+      (session?.user?.user_metadata?.display_name as string | undefined)
+
+    return planDisplayName ?? metaName ?? session?.user?.email ?? "there"
+  }, [planDisplayName, session?.user])
+
+  // Get greeting
+  const greeting = React.useMemo(() => {
+    const hour = new Date().getHours()
+    if (hour >= 5 && hour < 12) return "Good morning"
+    if (hour >= 12 && hour < 17) return "Good day"
+    if (hour >= 17 && hour < 21) return "Good evening"
+    return "Good night"
+  }, [])
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -616,11 +636,6 @@ export function OnboardingChatbot() {
     }
   }, [collectedData, session?.access_token])
 
-  // Skip onboarding
-  const handleSkip = useCallback(() => {
-    router.replace("/overview")
-  }, [router])
-
   // Focus textarea when started
   useEffect(() => {
     if (hasStarted && textareaRef.current) {
@@ -652,20 +667,28 @@ export function OnboardingChatbot() {
             key="welcome"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
+            exit={{ opacity: 0, y: -100 }}
+            transition={{ duration: 0.5 }}
             className="flex flex-1 flex-col items-center justify-center gap-8 p-6 min-h-0"
           >
             <div className="text-center">
               <div className="mb-4 inline-flex items-center justify-center rounded-full bg-primary/10 p-4">
-                <Sparkles className="size-8 text-primary" />
+                <Image
+                  src="/favicon.svg"
+                  alt="HireMePlz"
+                  width={48}
+                  height={48}
+                  className="h-8 w-8"
+                />
               </div>
-              <h1 className="mb-2 text-2xl font-bold tracking-tight">
-                Welcome to HireMePlz
+              <h1
+                className="mb-2 text-2xl tracking-tight"
+                suppressHydrationWarning
+              >
+                {greeting}, {userName}
               </h1>
               <p className="max-w-md text-muted-foreground">
-                Let&apos;s set up your profile through a quick chat. I&apos;ll
-                ask you a few questions to understand your preferences.
+                Begin by answering our AI agent&apos;s questions to get started
               </p>
             </div>
 
@@ -676,17 +699,7 @@ export function OnboardingChatbot() {
                 onClick={startConversation}
                 disabled={isLoading}
               >
-                <Sparkles className="size-4" />
                 Start onboarding
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={handleSkip}
-                className="text-muted-foreground"
-              >
-                Skip for now
               </Button>
             </div>
           </motion.div>
@@ -700,7 +713,7 @@ export function OnboardingChatbot() {
             className="flex flex-1 flex-col min-h-0 overflow-hidden"
           >
             <Conversation className="flex-1 min-h-0">
-              <ConversationContent className="mx-auto w-full max-w-3xl pb-4">
+              <ConversationContent className="mx-auto w-full max-w-3xl pt-6 pb-4">
                 {messages.map((message) => (
                   <Message
                     key={message.id}
@@ -859,16 +872,6 @@ export function OnboardingChatbot() {
                   />
                 </PromptInputBody>
                 <PromptInputFooter>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleSkip}
-                    className="text-muted-foreground"
-                    disabled={isSaving || editingMessageId !== null}
-                  >
-                    Skip
-                  </Button>
                   <PromptInputSubmit
                     className="bg-accent text-accent-foreground hover:bg-accent/90"
                     disabled={isLoading || isSaving || isStreaming || editingMessageId !== null || !input.trim()}
