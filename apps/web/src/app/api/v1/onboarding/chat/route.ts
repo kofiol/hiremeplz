@@ -1,8 +1,8 @@
-import { NextRequest } from "next/server";
-import { Agent, run } from "@openai/agents";
-import { z } from "zod";
-import { existsSync, readFileSync } from "node:fs";
-import path from "node:path";
+import { NextRequest } from "next/server"
+import { Agent, run } from "@openai/agents"
+import { z } from "zod"
+import { existsSync, readFileSync } from "node:fs"
+import path from "node:path"
 
 // ============================================================================
 // Zod Schema for Collected Onboarding Data
@@ -10,7 +10,7 @@ import path from "node:path";
 
 const SkillSchema = z.object({
   name: z.string(),
-});
+})
 
 const ExperienceSchema = z.object({
   title: z.string(),
@@ -18,7 +18,7 @@ const ExperienceSchema = z.object({
   startDate: z.union([z.string(), z.null()]),
   endDate: z.union([z.string(), z.null()]),
   highlights: z.union([z.string(), z.null()]),
-});
+})
 
 const EducationSchema = z.object({
   school: z.string(),
@@ -26,7 +26,7 @@ const EducationSchema = z.object({
   field: z.union([z.string(), z.null()]),
   startYear: z.union([z.string(), z.null()]),
   endYear: z.union([z.string(), z.null()]),
-});
+})
 
 const CollectedDataSchema = z.object({
   teamMode: z.union([z.enum(["solo", "team"]), z.null()]),
@@ -56,40 +56,38 @@ const CollectedDataSchema = z.object({
     z.null(),
   ]),
   remoteOnly: z.union([z.boolean(), z.null()]),
-});
+})
 
-// Agent response schema
-const OnboardingResponseSchema = z.object({
-  message: z.string().describe("Your conversational response to the user"),
+// Data extraction response schema
+const DataExtractionResponseSchema = z.object({
   collectedData: CollectedDataSchema.describe(
-    "All data collected so far, merged with any new data from the user's message. Keep all previously collected data."
+    "All data collected so far, merged with any new data from the confirmed conversation. Keep all previously collected data."
   ),
   isComplete: z
     .boolean()
     .describe(
       "True only when ALL required fields have been collected: teamMode, profilePath (and corresponding URL if applicable), and at least some preferences (hourlyMin or fixedBudgetMin, currency)"
     ),
-});
+})
 
-type OnboardingResponse = z.infer<typeof OnboardingResponseSchema>;
+type DataExtractionResponse = z.infer<typeof DataExtractionResponseSchema>
 
-const nullableString = { type: ["string", "null"] } as const;
-const nullableNumber = { type: ["number", "null"] } as const;
-const nullableBoolean = { type: ["boolean", "null"] } as const;
+const nullableString = { type: ["string", "null"] } as const
+const nullableNumber = { type: ["number", "null"] } as const
+const nullableBoolean = { type: ["boolean", "null"] } as const
 const nullableEnum = (values: string[]) => ({
   anyOf: [{ type: "string", enum: values }, { type: "null" }],
-});
+})
 
-const OnboardingResponseJsonSchema = {
+const DataExtractionJsonSchema = {
   type: "json_schema" as const,
-  name: "OnboardingResponse",
+  name: "DataExtractionResponse",
   strict: true,
   schema: {
     type: "object" as const,
     additionalProperties: false,
-    required: ["message", "collectedData", "isComplete"],
+    required: ["collectedData", "isComplete"],
     properties: {
-      message: { type: "string" },
       collectedData: {
         type: "object" as const,
         additionalProperties: false,
@@ -213,7 +211,7 @@ const OnboardingResponseJsonSchema = {
       isComplete: { type: "boolean" },
     },
   },
-};
+}
 
 // ============================================================================
 // Request Schema
@@ -228,70 +226,84 @@ const RequestSchema = z.object({
     })
   ),
   collectedData: CollectedDataSchema.partial(),
-});
+  stream: z.boolean().optional().default(false),
+})
 
 function readEnvLocalValue(key: string) {
   try {
-    const envPath = path.join(process.cwd(), ".env.local");
+    const envPath = path.join(process.cwd(), ".env.local")
     if (!existsSync(envPath)) {
-      return null;
+      return null
     }
 
-    const lines = readFileSync(envPath, "utf8").split(/\r?\n/);
+    const lines = readFileSync(envPath, "utf8").split(/\r?\n/)
     for (const line of lines) {
-      const trimmed = line.trim();
+      const trimmed = line.trim()
       if (!trimmed || trimmed.startsWith("#")) {
-        continue;
+        continue
       }
 
-      const separatorIndex = trimmed.indexOf("=");
+      const separatorIndex = trimmed.indexOf("=")
       if (separatorIndex === -1) {
-        continue;
+        continue
       }
 
-      const currentKey = trimmed.slice(0, separatorIndex).trim();
+      const currentKey = trimmed.slice(0, separatorIndex).trim()
       if (currentKey !== key) {
-        continue;
+        continue
       }
 
-      let value = trimmed.slice(separatorIndex + 1).trim();
+      let value = trimmed.slice(separatorIndex + 1).trim()
       if (
         (value.startsWith('"') && value.endsWith('"')) ||
         (value.startsWith("'") && value.endsWith("'"))
       ) {
-        value = value.slice(1, -1);
+        value = value.slice(1, -1)
       }
 
-      return value || null;
+      return value || null
     }
   } catch {
-    return null;
+    return null
   }
 
-  return null;
+  return null
 }
 
 // ============================================================================
 // Agent Instructions
 // ============================================================================
 
-const AGENT_INSTRUCTIONS = `You are a friendly onboarding assistant for HireMePlz, a platform that helps freelancers find jobs.
-Your job is to collect user preferences through natural, conversational questions.
+const CONVERSATIONAL_AGENT_INSTRUCTIONS = `You are a friendly onboarding assistant for HireMePlz, a platform that helps freelancers find jobs.
+Your job is to have a natural conversation to collect user preferences.
+
+## CRITICAL: Validate User Responses
+Before accepting ANY user response, you MUST:
+1. Check if the response is complete and makes sense
+2. If the response is incomplete, unclear, or too short (less than 3 characters for important answers), ask for clarification
+3. Never accept single characters, random letters, or gibberish as valid answers
+4. If someone says "I lead a team of" but doesn't specify the size, ask "How many people are on your team?"
+
+Examples of INVALID responses you should ask to clarify:
+- "o" → Ask: "I didn't catch that. Could you tell me if you're working solo or leading a team?"
+- "ll" → Ask: "I'm not sure I understood. Could you please provide a clearer response?"
+- "I lead a team of" → Ask: "Great! How many people are on your team?"
+- Random characters → Ask: "I couldn't understand that. Could you please rephrase?"
 
 ## Guidelines
 - Be concise and professional
 - No emojis
 - Ask ONE question at a time
 - Use short sentences so users can answer quickly
-- Extract structured data from freeform responses
-- If a user gives vague answers, gently ask for clarification
 - Be encouraging and make the process feel quick
+- Just respond naturally - don't output any JSON or structured data
+- ALWAYS confirm you understood before moving to the next question
 
 ## Conversation Flow
 1. **Start**: Greet warmly and ask if they're a solo freelancer or leading a small team
 2. **Profile Setup**: Ask how they'd like to set up their profile:
    - Import from LinkedIn (ask for URL)
-   - Import from Upwork (ask for URL)  
+   - Import from Upwork (ask for URL)
    - Add a portfolio link (ask for URL)
    - Set up manually (ask about experience level, skills, work history, education)
 3. **Preferences**: Ask about their work preferences:
@@ -302,23 +314,52 @@ Your job is to collect user preferences through natural, conversational question
    - Time zones they can work in
    - Engagement types (full-time, part-time, internship)
    - Remote only preference
-4. **Wrap Up**: Summarize what you've collected and confirm completion
+4. **Wrap Up**: When you have enough info, summarize and confirm
 
-## Example Tone
-"Got it. Are you a solo freelancer or do you lead a small team?"
+## Example Responses
+User: "solo"
+You: "Got it, you're working solo. Now, how would you like to set up your profile? You can import from LinkedIn, Upwork, add a portfolio link, or set up manually."
 
-"Perfect! And what's your preferred hourly rate range? For example, '$50-100/hr' or whatever feels right for your experience."
+User: "team"
+You: "Great, you lead a team! How many people are on your team, including yourself?"
 
-## Important Rules
-- ALWAYS maintain all previously collected data in your response
-- Set isComplete to true ONLY when you have: teamMode, profilePath (with URL if needed), and at least some rate/budget preferences
-- For manual profile setup, experience level is required; skills, experiences, and education are optional
-- Be flexible with how users express rates (e.g., "50-100", "$50/hr to $100/hr", "around 75")
-- Parse time zones flexibly (e.g., "EST", "UTC-5", "Eastern Time")
+User: "manual"
+You: "Perfect, let's set up your profile manually. What's your experience level? Are you entry-level, mid-level, senior, or in a leadership role?"
+
+User: "50-75"
+You: "Got it, $50-75 per hour. What currency is that in - USD, EUR, GBP, CAD, or AUD?"
+
+## Important
+- Keep track of what's been discussed in the conversation history
+- Don't repeat questions that have already been answered with VALID responses
 - If user wants to skip optional fields, that's okay - acknowledge and move on
+- ALWAYS validate before accepting - if something seems incomplete, ask for clarification`
+
+const DATA_EXTRACTION_INSTRUCTIONS = `You are a data extraction agent. Your ONLY job is to extract structured data from CONFIRMED conversation exchanges.
+
+IMPORTANT: You are "blind" - you only see what the conversational agent has confirmed. You should ONLY extract data from clear, confirmed statements in the conversation where the assistant acknowledged the information.
+
+## Rules
+- ALWAYS preserve all previously collected data
+- Only update fields when the conversation shows CLEAR, CONFIRMED information
+- If the conversational agent asked for clarification, do NOT extract data from the incomplete response
+- Set isComplete to true ONLY when you have: teamMode, profilePath (with URL if needed), and at least some rate/budget preferences (hourlyMin or fixedBudgetMin + currency)
+
+## What to Extract
+ONLY extract when you see the assistant confirming/acknowledging like:
+- "Got it, you're working solo" → teamMode: "solo"
+- "Great, you lead a team!" → teamMode: "team"
+- "Perfect, let's set up manually" → profilePath: "manual"
+- "Got it, $50-75 per hour" → hourlyMin: 50, hourlyMax: 75
+
+## What NOT to Extract
+- Incomplete user responses that the assistant asked to clarify
+- Random characters or gibberish
+- Anything where the assistant responded with "I didn't catch that" or "Could you please rephrase"
+- User responses that weren't acknowledged/confirmed by the assistant
 
 ## Current Data
-The user's currently collected data will be provided. Preserve ALL existing data and only add/update based on the user's new message.`;
+Preserve ALL existing data and only add/update based on clearly confirmed information in the conversation.`
 
 // ============================================================================
 // API Route
@@ -326,8 +367,8 @@ The user's currently collected data will be provided. Preserve ALL existing data
 
 export async function POST(request: NextRequest) {
   try {
-    const json = await request.json();
-    const parsed = RequestSchema.safeParse(json);
+    const json = await request.json()
+    const parsed = RequestSchema.safeParse(json)
 
     if (!parsed.success) {
       return Response.json(
@@ -339,67 +380,182 @@ export async function POST(request: NextRequest) {
           },
         },
         { status: 400 }
-      );
+      )
     }
 
-    const { message, conversationHistory, collectedData } = parsed.data;
+    const { message, conversationHistory, collectedData, stream } = parsed.data
 
     // Verify API key is configured
     const apiKey =
-      readEnvLocalValue("OPENAI_API_KEY") ?? process.env.OPENAI_API_KEY;
+      readEnvLocalValue("OPENAI_API_KEY") ?? process.env.OPENAI_API_KEY
     if (!apiKey) {
-      console.error("OPENAI_API_KEY is not configured in environment");
-      console.error("Available env vars:", Object.keys(process.env).filter(k => k.includes('OPENAI')));
+      console.error("OPENAI_API_KEY is not configured in environment")
       return Response.json(
         {
           error: {
             code: "configuration_error",
-            message: "OpenAI API key is not configured. Please restart the dev server after setting OPENAI_API_KEY in .env.local",
+            message: "OpenAI API key is not configured",
           },
         },
         { status: 500 }
-      );
+      )
     }
 
-    // Set the API key in the environment for the OpenAI Agents SDK
-    // The SDK reads from process.env.OPENAI_API_KEY
-    process.env.OPENAI_API_KEY = apiKey;
+    process.env.OPENAI_API_KEY = apiKey
 
     // Build conversation context
-    const contextMessage = `
-Current collected data (preserve all of this and add any new information):
-${JSON.stringify(collectedData, null, 2)}
+    const conversationContext = conversationHistory.map((m) => `${m.role}: ${m.content}`).join("\n")
 
+    const conversationalPrompt = `
 Conversation so far:
-${conversationHistory.map((m) => `${m.role}: ${m.content}`).join("\n")}
+${conversationContext}
 
 User's new message: ${message}
-`;
 
-    // Create the agent with structured output
-    const onboardingAgent = new Agent({
-      name: "Onboarding Assistant",
-      instructions: AGENT_INSTRUCTIONS,
+Respond naturally to continue the onboarding conversation. Remember to validate the user's response - if it's incomplete or unclear, ask for clarification.`
+
+    // Create conversational agent
+    const conversationalAgent = new Agent({
+      name: "Conversational Assistant",
+      instructions: CONVERSATIONAL_AGENT_INSTRUCTIONS,
       model: "gpt-4.1-nano",
-      outputType: OnboardingResponseJsonSchema,
-    });
+    })
 
-    // Run the agent
-    const result = await run(onboardingAgent, contextMessage);
+    // Handle streaming response
+    if (stream) {
+      const encoder = new TextEncoder()
 
-    if (!result.finalOutput) {
-      throw new Error("Agent did not produce output");
+      // Run conversational agent with streaming
+      const conversationalResult = await run(conversationalAgent, conversationalPrompt, { stream: true })
+
+      const readableStream = new ReadableStream({
+        async start(controller) {
+          let fullConversationalResponse = ""
+
+          try {
+            // Stream the conversational response
+            const textStream = conversationalResult.toTextStream({ compatibleWithNodeStreams: false })
+
+            for await (const chunk of textStream) {
+              fullConversationalResponse += chunk
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ type: "text", content: chunk })}\n\n`)
+              )
+            }
+
+            // Wait for conversational agent to complete
+            await conversationalResult.completed
+
+            // Now run data extraction AFTER conversational agent completes
+            // The extraction agent only sees the CONFIRMED conversation
+            const fullConversation = `${conversationContext}
+user: ${message}
+assistant: ${fullConversationalResponse}`
+
+            const dataExtractionPrompt = `
+Current collected data (preserve all of this):
+${JSON.stringify(collectedData, null, 2)}
+
+Full conversation with the assistant's response:
+${fullConversation}
+
+Extract ONLY data that the assistant has clearly confirmed/acknowledged. If the assistant asked for clarification, do NOT extract from the user's unclear response.`
+
+            const dataExtractionAgent = new Agent({
+              name: "Data Extraction Agent",
+              instructions: DATA_EXTRACTION_INSTRUCTIONS,
+              model: "gpt-4.1-nano",
+              outputType: DataExtractionJsonSchema,
+            })
+
+            const dataResult = await run(dataExtractionAgent, dataExtractionPrompt)
+
+            if (dataResult.finalOutput) {
+              const extracted = DataExtractionResponseSchema.parse(dataResult.finalOutput) as DataExtractionResponse
+
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({
+                    type: "final",
+                    collectedData: extracted.collectedData,
+                    isComplete: extracted.isComplete,
+                  })}\n\n`
+                )
+              )
+            }
+
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"))
+            controller.close()
+          } catch (error) {
+            console.error("Streaming error:", error)
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({
+                  type: "error",
+                  message: error instanceof Error ? error.message : "Streaming failed",
+                })}\n\n`
+              )
+            )
+            controller.close()
+          }
+        },
+      })
+
+      return new Response(readableStream, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+      })
     }
 
-    const response = OnboardingResponseSchema.parse(result.finalOutput) as OnboardingResponse;
+    // Non-streaming response: run conversational agent first, then extraction
+    const conversationalResult = await run(conversationalAgent, conversationalPrompt)
+
+    const messageText = typeof conversationalResult.finalOutput === "string"
+      ? conversationalResult.finalOutput
+      : String(conversationalResult.finalOutput ?? "")
+
+    // Build full conversation with the assistant's response
+    const fullConversation = `${conversationContext}
+user: ${message}
+assistant: ${messageText}`
+
+    const dataExtractionPrompt = `
+Current collected data (preserve all of this):
+${JSON.stringify(collectedData, null, 2)}
+
+Full conversation with the assistant's response:
+${fullConversation}
+
+Extract ONLY data that the assistant has clearly confirmed/acknowledged. If the assistant asked for clarification, do NOT extract from the user's unclear response.`
+
+    const dataExtractionAgent = new Agent({
+      name: "Data Extraction Agent",
+      instructions: DATA_EXTRACTION_INSTRUCTIONS,
+      model: "gpt-4.1-nano",
+      outputType: DataExtractionJsonSchema,
+    })
+
+    const dataResult = await run(dataExtractionAgent, dataExtractionPrompt)
+
+    let extractedData = collectedData
+    let isComplete = false
+
+    if (dataResult.finalOutput) {
+      const extracted = DataExtractionResponseSchema.parse(dataResult.finalOutput) as DataExtractionResponse
+      extractedData = extracted.collectedData
+      isComplete = extracted.isComplete
+    }
 
     return Response.json({
-      message: response.message,
-      collectedData: response.collectedData,
-      isComplete: response.isComplete,
-    });
+      message: messageText,
+      collectedData: extractedData,
+      isComplete,
+    })
   } catch (error) {
-    console.error("Onboarding chat error:", error);
+    console.error("Onboarding chat error:", error)
 
     if (error instanceof Error) {
       return Response.json(
@@ -410,7 +566,7 @@ User's new message: ${message}
           },
         },
         { status: 500 }
-      );
+      )
     }
 
     return Response.json(
@@ -421,6 +577,6 @@ User's new message: ${message}
         },
       },
       { status: 500 }
-    );
+    )
   }
 }

@@ -1,21 +1,21 @@
-"use client";
+"use client"
 
-import * as React from "react";
-import { useCallback, useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
-import { useSession } from "@/app/auth/session-provider";
+import * as React from "react"
+import { useCallback, useState, useRef, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { AnimatePresence, motion } from "framer-motion"
+import { useSession } from "@/app/auth/session-provider"
 import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
-} from "@/components/ai-elements/conversation";
+} from "@/components/ai-elements/conversation"
 import {
   Message,
   MessageContent,
   MessageBubble,
   MessageError,
-} from "@/components/ai-elements/message";
+} from "@/components/ai-elements/message"
 import {
   PromptInput,
   PromptInputBody,
@@ -23,26 +23,26 @@ import {
   PromptInputFooter,
   PromptInputSubmit,
   type PromptInputMessage,
-} from "@/components/ai-elements/prompt-input";
-import { Button } from "@/components/ui/button";
-import { Check, Pencil, Sparkles, X } from "lucide-react";
+} from "@/components/ai-elements/prompt-input"
+import { Button } from "@/components/ui/button"
+import { Check, Pencil, Sparkles, X } from "lucide-react"
 
 // ============================================================================
 // Types
 // ============================================================================
 
 type ChatMessage = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-};
+  id: string
+  role: "user" | "assistant"
+  content: string
+}
 
 type CollectedData = {
-  teamMode: "solo" | "team" | null;
-  profilePath: "linkedin" | "upwork" | "cv" | "portfolio" | "manual" | null;
-  linkedinUrl: string | null;
-  upworkUrl: string | null;
-  portfolioUrl: string | null;
+  teamMode: "solo" | "team" | null
+  profilePath: "linkedin" | "upwork" | "cv" | "portfolio" | "manual" | null
+  linkedinUrl: string | null
+  upworkUrl: string | null
+  portfolioUrl: string | null
   experienceLevel:
     | "intern_new_grad"
     | "entry"
@@ -50,36 +50,36 @@ type CollectedData = {
     | "senior"
     | "lead"
     | "director"
-    | null;
-  skills: { name: string }[] | null;
+    | null
+  skills: { name: string }[] | null
   experiences:
     | {
-        title: string;
-        company: string | null;
-        startDate: string | null;
-        endDate: string | null;
-        highlights: string | null;
+        title: string
+        company: string | null
+        startDate: string | null
+        endDate: string | null
+        highlights: string | null
       }[]
-    | null;
+    | null
   educations:
     | {
-        school: string;
-        degree: string | null;
-        field: string | null;
-        startYear: string | null;
-        endYear: string | null;
+        school: string
+        degree: string | null
+        field: string | null
+        startYear: string | null
+        endYear: string | null
       }[]
-    | null;
-  hourlyMin: number | null;
-  hourlyMax: number | null;
-  fixedBudgetMin: number | null;
-  currency: "USD" | "EUR" | "GBP" | "CAD" | "AUD" | null;
-  preferredProjectLengthMin: number | null;
-  preferredProjectLengthMax: number | null;
-  timeZones: string[] | null;
-  engagementTypes: ("full_time" | "part_time" | "internship")[] | null;
-  remoteOnly: boolean | null;
-};
+    | null
+  hourlyMin: number | null
+  hourlyMax: number | null
+  fixedBudgetMin: number | null
+  currency: "USD" | "EUR" | "GBP" | "CAD" | "AUD" | null
+  preferredProjectLengthMin: number | null
+  preferredProjectLengthMax: number | null
+  timeZones: string[] | null
+  engagementTypes: ("full_time" | "part_time" | "internship")[] | null
+  remoteOnly: boolean | null
+}
 
 const initialCollectedData: CollectedData = {
   teamMode: null,
@@ -100,14 +100,14 @@ const initialCollectedData: CollectedData = {
   timeZones: null,
   engagementTypes: null,
   remoteOnly: null,
-};
+}
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
 function generateId() {
-  return Math.random().toString(36).slice(2);
+  return Math.random().toString(36).slice(2)
 }
 
 // Transform collected data to the format expected by the onboarding API
@@ -155,7 +155,7 @@ function transformToOnboardingPayload(data: CollectedData) {
       engagementTypes: data.engagementTypes ?? [],
       tightness: 3,
     },
-  };
+  }
 }
 
 // ============================================================================
@@ -163,92 +163,76 @@ function transformToOnboardingPayload(data: CollectedData) {
 // ============================================================================
 
 export function OnboardingChatbot() {
-  const router = useRouter();
-  const { session } = useSession();
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const editTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const avatarUrlFromSession =
-    (session?.user?.user_metadata?.avatar_url as string | undefined) ??
-    (session?.user?.user_metadata?.picture as string | undefined) ??
-    null;
-  const userNameFromSession =
-    (session?.user?.user_metadata?.full_name as string | undefined) ??
-    (session?.user?.user_metadata?.name as string | undefined) ??
-    (session?.user?.user_metadata?.display_name as string | undefined) ??
-    null;
-  const emailFromSession = session?.user?.email ?? null;
-  const avatarAlt = userNameFromSession ?? emailFromSession ?? "";
-  const avatarFallback = React.useMemo(() => {
-    const base = (userNameFromSession ?? emailFromSession ?? "").trim();
-    if (!base) return "?";
-    const parts = base.split(/\s+/).filter(Boolean);
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  }, [emailFromSession, userNameFromSession]);
+  const router = useRouter()
+  const { session } = useSession()
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Chat state
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [input, setInput] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [isStreaming, setIsStreaming] = useState(false)
+  const [streamingContent, setStreamingContent] = useState("")
+  const [error, setError] = useState<string | null>(null)
 
   // Onboarding state
   const [collectedData, setCollectedData] =
-    useState<CollectedData>(initialCollectedData);
-  const [hasStarted, setHasStarted] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isComplete, setIsComplete] = useState(false);
-  const [isRestoring, setIsRestoring] = useState(true);
-  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [editingText, setEditingText] = useState("");
+    useState<CollectedData>(initialCollectedData)
+  const [hasStarted, setHasStarted] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isComplete, setIsComplete] = useState(false)
+  const [isRestoring, setIsRestoring] = useState(true)
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const [editingText, setEditingText] = useState("")
 
   // Load progress on mount
   useEffect(() => {
     async function loadProgress() {
-      if (!session?.access_token) return;
+      if (!session?.access_token) return
 
       try {
         const response = await fetch("/api/v1/onboarding/progress", {
           headers: {
             Authorization: `Bearer ${session.access_token}`,
           },
-        });
+        })
 
         if (response.ok) {
-          const data = await response.json();
+          const data = await response.json()
           if (data.onboardingProgress) {
-            const { messages: savedMessages, collectedData: savedData, hasStarted: savedHasStarted } = data.onboardingProgress;
-            if (savedMessages) setMessages(savedMessages);
-            if (savedData) setCollectedData(savedData);
-            if (savedHasStarted) setHasStarted(savedHasStarted);
+            const { messages: savedMessages, collectedData: savedData, hasStarted: savedHasStarted } = data.onboardingProgress
+            if (savedMessages) setMessages(savedMessages)
+            if (savedData) setCollectedData(savedData)
+            if (savedHasStarted) setHasStarted(savedHasStarted)
           }
         }
       } catch (err) {
-        console.error("Failed to load progress:", err);
+        console.error("Failed to load progress:", err)
       } finally {
-        setIsRestoring(false);
+        setIsRestoring(false)
       }
     }
 
-    loadProgress();
-  }, [session?.access_token]);
+    loadProgress()
+  }, [session?.access_token])
 
   useEffect(() => {
-    if (!editingMessageId) return;
-    editTextareaRef.current?.focus();
+    if (!editingMessageId) return
+    editTextareaRef.current?.focus()
     editTextareaRef.current?.setSelectionRange(
       editTextareaRef.current.value.length,
       editTextareaRef.current.value.length
-    );
-  }, [editingMessageId]);
+    )
+  }, [editingMessageId])
 
   // Save progress
   const saveProgress = useCallback(async (
-    newMessages: ChatMessage[], 
+    newMessages: ChatMessage[],
     newData: CollectedData,
     started: boolean
   ) => {
-    if (!session?.access_token) return;
+    if (!session?.access_token) return
 
     try {
       await fetch("/api/v1/onboarding/progress", {
@@ -262,18 +246,91 @@ export function OnboardingChatbot() {
           collectedData: newData,
           hasStarted: started,
         }),
-      });
+      })
     } catch (err) {
-      console.error("Failed to save progress:", err);
+      console.error("Failed to save progress:", err)
     }
-  }, [session?.access_token]);
+  }, [session?.access_token])
 
-  // Start the conversation when user sends first message or clicks start
+  // Process streaming response
+  const processStreamResponse = useCallback(async (
+    response: Response,
+    updatedMessages: ChatMessage[],
+    currentCollectedData: CollectedData,
+    currentHasStarted: boolean
+  ) => {
+    const reader = response.body?.getReader()
+    if (!reader) {
+      throw new Error("No response body")
+    }
+
+    const decoder = new TextDecoder()
+    let fullContent = ""
+    let finalCollectedData = currentCollectedData
+    let finalIsComplete = false
+
+    setIsStreaming(true)
+    setStreamingContent("")
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split("\n")
+
+        for (const line of lines) {
+          if (!line.trim() || !line.startsWith("data: ")) continue
+
+          const data = line.slice(6)
+          if (data === "[DONE]") continue
+
+          try {
+            const parsed = JSON.parse(data)
+
+            if (parsed.type === "text") {
+              fullContent += parsed.content
+              setStreamingContent(fullContent)
+            } else if (parsed.type === "final") {
+              if (parsed.collectedData) {
+                finalCollectedData = parsed.collectedData
+              }
+              finalIsComplete = parsed.isComplete ?? false
+            }
+          } catch {
+            // Ignore parse errors for incomplete chunks
+          }
+        }
+      }
+    } finally {
+      setIsStreaming(false)
+      setStreamingContent("")
+    }
+
+    const assistantMessage: ChatMessage = {
+      id: generateId(),
+      role: "assistant",
+      content: fullContent,
+    }
+
+    const finalMessages = [...updatedMessages, assistantMessage]
+    setMessages(finalMessages)
+    setCollectedData(finalCollectedData)
+
+    if (finalIsComplete) {
+      setIsComplete(true)
+    }
+
+    saveProgress(finalMessages, finalCollectedData, currentHasStarted)
+  }, [saveProgress])
+
+  // Start the conversation when user clicks start
   const startConversation = useCallback(async () => {
-    const newHasStarted = true;
-    setHasStarted(newHasStarted);
-    setIsLoading(true);
-    setError(null);
+    const newHasStarted = true
+    setHasStarted(newHasStarted)
+    setIsLoading(true)
+    setError(null)
 
     try {
       const response = await fetch("/api/v1/onboarding/chat", {
@@ -283,67 +340,73 @@ export function OnboardingChatbot() {
           message: "Hi, I'm ready to set up my profile!",
           conversationHistory: [],
           collectedData: initialCollectedData,
+          stream: true,
         }),
-      });
+      })
 
       if (!response.ok) {
-        throw new Error("Failed to start conversation");
+        throw new Error("Failed to start conversation")
       }
 
-      const data = await response.json();
+      const contentType = response.headers.get("content-type")
 
-      const newMessages: ChatMessage[] = [
-        {
-          id: generateId(),
-          role: "assistant",
-          content: data.message,
-        },
-      ];
-      setMessages(newMessages);
+      if (contentType?.includes("text/event-stream")) {
+        await processStreamResponse(response, [], initialCollectedData, newHasStarted)
+      } else {
+        // Fallback for non-streaming response
+        const data = await response.json()
 
-      let newData = collectedData;
-      if (data.collectedData) {
-        newData = data.collectedData;
-        setCollectedData(newData);
+        const newMessages: ChatMessage[] = [
+          {
+            id: generateId(),
+            role: "assistant",
+            content: data.message,
+          },
+        ]
+        setMessages(newMessages)
+
+        let newData = collectedData
+        if (data.collectedData) {
+          newData = data.collectedData
+          setCollectedData(newData)
+        }
+
+        saveProgress(newMessages, newData, newHasStarted)
       }
-
-      // Save progress
-      saveProgress(newMessages, newData, newHasStarted);
-
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to start conversation"
-      );
+      )
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  }, [collectedData, saveProgress]);
+  }, [collectedData, processStreamResponse, saveProgress])
 
   // Send a message
   const sendMessage = useCallback(
     async (text: string) => {
-      if (!text.trim() || isLoading) return;
+      if (!text.trim() || isLoading || isStreaming) return
 
       const userMessage: ChatMessage = {
         id: generateId(),
         role: "user",
         content: text.trim(),
-      };
+      }
 
-      const updatedMessages = [...messages, userMessage];
-      setMessages(updatedMessages);
-      setInput("");
-      setIsLoading(true);
-      setError(null);
+      const updatedMessages = [...messages, userMessage]
+      setMessages(updatedMessages)
+      setInput("")
+      setIsLoading(true)
+      setError(null)
 
       // Optimistic save
-      saveProgress(updatedMessages, collectedData, hasStarted);
+      saveProgress(updatedMessages, collectedData, hasStarted)
 
       try {
         const conversationHistory = updatedMessages.map((m) => ({
           role: m.role,
           content: m.content,
-        }));
+        }))
 
         const response = await fetch("/api/v1/onboarding/chat", {
           method: "POST",
@@ -352,84 +415,95 @@ export function OnboardingChatbot() {
             message: text.trim(),
             conversationHistory,
             collectedData,
+            stream: true,
           }),
-        });
+        })
 
         if (!response.ok) {
-          const errorData = await response.json().catch(() => null);
-          throw new Error(errorData?.error?.message || "Failed to send message");
+          const errorData = await response.json().catch(() => null)
+          throw new Error(errorData?.error?.message || "Failed to send message")
         }
 
-        const data = await response.json();
+        const contentType = response.headers.get("content-type")
 
-        const assistantMessage: ChatMessage = {
-          id: generateId(),
-          role: "assistant",
-          content: data.message,
-        };
+        if (contentType?.includes("text/event-stream")) {
+          await processStreamResponse(response, updatedMessages, collectedData, hasStarted)
+        } else {
+          // Fallback for non-streaming response
+          const data = await response.json()
 
-        const finalMessages = [...updatedMessages, assistantMessage];
-        setMessages(finalMessages);
+          const assistantMessage: ChatMessage = {
+            id: generateId(),
+            role: "assistant",
+            content: data.message,
+          }
 
-        let finalData = collectedData;
-        if (data.collectedData) {
-          finalData = data.collectedData;
-          setCollectedData(finalData);
+          const finalMessages = [...updatedMessages, assistantMessage]
+          setMessages(finalMessages)
+
+          let finalData = collectedData
+          if (data.collectedData) {
+            finalData = data.collectedData
+            setCollectedData(finalData)
+          }
+
+          if (data.isComplete) {
+            setIsComplete(true)
+          }
+
+          saveProgress(finalMessages, finalData, hasStarted)
         }
-
-        if (data.isComplete) {
-          setIsComplete(true);
-        }
-
-        // Final save for this turn
-        saveProgress(finalMessages, finalData, hasStarted);
-
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to send message");
+        setError(err instanceof Error ? err.message : "Failed to send message")
       } finally {
-        setIsLoading(false);
+        setIsLoading(false)
       }
     },
-    [messages, collectedData, isLoading, hasStarted, saveProgress]
-  );
+    [messages, collectedData, isLoading, isStreaming, hasStarted, processStreamResponse, saveProgress]
+  )
 
   const beginEditMessage = useCallback((message: ChatMessage) => {
-    setEditingMessageId(message.id);
-    setEditingText(message.content);
-  }, []);
+    setEditingMessageId(message.id)
+    setEditingText(message.content)
+  }, [])
 
   const cancelEditMessage = useCallback(() => {
-    setEditingMessageId(null);
-    setEditingText("");
-  }, []);
+    setEditingMessageId(null)
+    setEditingText("")
+  }, [])
 
   const saveEditedMessage = useCallback(async () => {
-    if (!editingMessageId) return;
-    if (!session?.access_token) return;
-    if (isLoading || isSaving) return;
+    if (!editingMessageId) return
+    if (!session?.access_token) return
+    if (isLoading || isSaving || isStreaming) return
 
-    const trimmed = editingText.trim();
-    if (!trimmed) return;
+    const trimmed = editingText.trim()
+    if (!trimmed) return
 
-    const editedIndex = messages.findIndex((m) => m.id === editingMessageId);
-    if (editedIndex === -1) return;
+    const editedIndex = messages.findIndex((m) => m.id === editingMessageId)
+    if (editedIndex === -1) return
 
-    const original = messages[editedIndex];
-    if (original.role !== "user") return;
+    const original = messages[editedIndex]
+    if (original.role !== "user") return
 
-    const historyBefore = messages.slice(0, editedIndex);
+    const historyBefore = messages.slice(0, editedIndex)
     const updatedUserMessage: ChatMessage = {
       ...original,
       content: trimmed,
-    };
+    }
 
     const conversationHistory = historyBefore.map((m) => ({
       role: m.role,
       content: m.content,
-    }));
+    }))
 
-    setIsLoading(true);
-    setError(null);
+    // Immediately update UI to show edited message and remove following messages
+    const messagesWithEdit = [...historyBefore, updatedUserMessage]
+    setMessages(messagesWithEdit)
+    setEditingMessageId(null)
+    setEditingText("")
+    setIsLoading(true)
+    setError(null)
 
     try {
       const response = await fetch("/api/v1/onboarding/chat", {
@@ -439,37 +513,42 @@ export function OnboardingChatbot() {
           message: trimmed,
           conversationHistory,
           collectedData: initialCollectedData,
+          stream: true,
         }),
-      });
+      })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.error?.message || "Failed to update message");
+        const errorData = await response.json().catch(() => null)
+        throw new Error(errorData?.error?.message || "Failed to update message")
       }
 
-      const data = await response.json();
+      const contentType = response.headers.get("content-type")
 
-      const assistantMessage: ChatMessage = {
-        id: generateId(),
-        role: "assistant",
-        content: data.message,
-      };
+      if (contentType?.includes("text/event-stream")) {
+        await processStreamResponse(response, messagesWithEdit, initialCollectedData, hasStarted)
+      } else {
+        // Fallback for non-streaming response
+        const data = await response.json()
 
-      const nextMessages = [...historyBefore, updatedUserMessage, assistantMessage];
-      setMessages(nextMessages);
+        const assistantMessage: ChatMessage = {
+          id: generateId(),
+          role: "assistant",
+          content: data.message,
+        }
 
-      const nextCollectedData: CollectedData = data.collectedData ?? initialCollectedData;
-      setCollectedData(nextCollectedData);
-      setIsComplete(Boolean(data.isComplete));
+        const nextMessages = [...messagesWithEdit, assistantMessage]
+        setMessages(nextMessages)
 
-      setEditingMessageId(null);
-      setEditingText("");
+        const nextCollectedData: CollectedData = data.collectedData ?? initialCollectedData
+        setCollectedData(nextCollectedData)
+        setIsComplete(Boolean(data.isComplete))
 
-      saveProgress(nextMessages, nextCollectedData, hasStarted);
+        saveProgress(nextMessages, nextCollectedData, hasStarted)
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update message");
+      setError(err instanceof Error ? err.message : "Failed to update message")
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
   }, [
     editingMessageId,
@@ -477,37 +556,39 @@ export function OnboardingChatbot() {
     hasStarted,
     isLoading,
     isSaving,
+    isStreaming,
     messages,
+    processStreamResponse,
     saveProgress,
     session?.access_token,
-  ]);
+  ])
 
   // Handle form submission
   const handleSubmit = useCallback(
     (message: PromptInputMessage) => {
       if (!hasStarted) {
-        return;
+        return
       }
 
       if (message.text) {
-        sendMessage(message.text);
+        sendMessage(message.text)
       }
     },
     [hasStarted, sendMessage]
-  );
+  )
 
   // Save onboarding data
   const saveOnboarding = useCallback(async () => {
     if (!session?.access_token) {
-      setError("Not authenticated");
-      return;
+      setError("Not authenticated")
+      return
     }
 
-    setIsSaving(true);
-    setError(null);
+    setIsSaving(true)
+    setError(null)
 
     try {
-      const payload = transformToOnboardingPayload(collectedData);
+      const payload = transformToOnboardingPayload(collectedData)
 
       const response = await fetch("/api/v1/onboarding", {
         method: "POST",
@@ -516,41 +597,36 @@ export function OnboardingChatbot() {
           Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify(payload),
-      });
+      })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
+        const errorData = await response.json().catch(() => null)
         throw new Error(
           errorData?.error?.message || "Failed to save onboarding"
-        );
+        )
       }
 
-      // We might want to clear the progress here, or let the backend do it.
-      // For now, we just redirect.
-      // Since we are likely ON /overview, we might just reload or update state.
-      // But let's stick to router.replace("/overview") to trigger re-checks.
-      
-      // If we are already on overview, we might need to force a refresh or state update.
-      window.location.href = "/overview";
-      
+      // Redirect to overview with a refresh to update the completeness state
+      window.location.href = "/overview"
+
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save");
+      setError(err instanceof Error ? err.message : "Failed to save")
     } finally {
-      setIsSaving(false);
+      setIsSaving(false)
     }
-  }, [collectedData, session?.access_token]);
+  }, [collectedData, session?.access_token])
 
   // Skip onboarding
   const handleSkip = useCallback(() => {
-    router.replace("/overview");
-  }, [router]);
+    router.replace("/overview")
+  }, [router])
 
   // Focus textarea when started
   useEffect(() => {
     if (hasStarted && textareaRef.current) {
-      textareaRef.current.focus();
+      textareaRef.current.focus()
     }
-  }, [hasStarted, isLoading]);
+  }, [hasStarted, isLoading])
 
   if (isRestoring) {
      return (
@@ -568,7 +644,7 @@ export function OnboardingChatbot() {
   // ============================================================================
 
   return (
-    <div className="flex h-full w-full flex-col p-6">
+    <div className="flex h-full w-full flex-col overflow-hidden">
       <AnimatePresence mode="wait">
         {!hasStarted ? (
           // Welcome state - centered input
@@ -578,7 +654,7 @@ export function OnboardingChatbot() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3 }}
-            className="flex flex-1 flex-col items-center justify-center gap-8 p-6"
+            className="flex flex-1 flex-col items-center justify-center gap-8 p-6 min-h-0"
           >
             <div className="text-center">
               <div className="mb-4 inline-flex items-center justify-center rounded-full bg-primary/10 p-4">
@@ -621,21 +697,15 @@ export function OnboardingChatbot() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
-            className="flex flex-1 flex-col overflow-hidden"
+            className="flex flex-1 flex-col min-h-0 overflow-hidden"
           >
-            <Conversation className="flex-1">
+            <Conversation className="flex-1 min-h-0">
               <ConversationContent className="mx-auto w-full max-w-3xl pb-4">
                 {messages.map((message) => (
                   <Message
                     key={message.id}
                     from={message.role}
-                    avatarUrl={
-                      message.role === "user" ? avatarUrlFromSession : null
-                    }
-                    avatarAlt={message.role === "user" ? avatarAlt : null}
-                    avatarFallback={
-                      message.role === "user" ? avatarFallback : null
-                    }
+                    hideAvatar
                   >
                     <MessageContent>
                       {message.role === "user" ? (
@@ -646,12 +716,12 @@ export function OnboardingChatbot() {
                                 ref={editTextareaRef}
                                 value={editingText}
                                 onChange={(e) => setEditingText(e.target.value)}
-                                className="w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                className="w-full resize-none rounded-lg border bg-background px-3 py-2 text-base leading-relaxed outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                                 rows={Math.min(
                                   6,
                                   Math.max(2, editingText.split("\n").length)
                                 )}
-                                disabled={isLoading || isSaving}
+                                disabled={isLoading || isSaving || isStreaming}
                               />
                               <div className="mt-2 flex items-center justify-end gap-2">
                                 <Button
@@ -659,7 +729,7 @@ export function OnboardingChatbot() {
                                   variant="ghost"
                                   size="sm"
                                   onClick={cancelEditMessage}
-                                  disabled={isLoading || isSaving}
+                                  disabled={isLoading || isSaving || isStreaming}
                                 >
                                   <X className="size-4" />
                                   Cancel
@@ -668,7 +738,7 @@ export function OnboardingChatbot() {
                                   type="button"
                                   size="sm"
                                   onClick={saveEditedMessage}
-                                  disabled={isLoading || isSaving || !editingText.trim()}
+                                  disabled={isLoading || isSaving || isStreaming || !editingText.trim()}
                                 >
                                   <Check className="size-4" />
                                   Save
@@ -676,25 +746,25 @@ export function OnboardingChatbot() {
                               </div>
                             </div>
                           ) : (
-                            <div className="group relative">
-                              <MessageBubble variant="user">
-                                {message.content}
-                              </MessageBubble>
+                            <div className="group relative flex items-center gap-2">
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="icon-sm"
                                 onClick={() => beginEditMessage(message)}
-                                className="absolute right-full top-1/2 mr-2 hidden -translate-y-1/2 group-hover:inline-flex"
-                                disabled={isLoading || isSaving}
+                                className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                                disabled={isLoading || isSaving || isStreaming}
                               >
                                 <Pencil className="size-4" />
                               </Button>
+                              <MessageBubble variant="user" className="text-base">
+                                {message.content}
+                              </MessageBubble>
                             </div>
                           )}
                         </div>
                       ) : (
-                        <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap text-foreground [&>p]:my-0 [&>p:not(:last-child)]:mb-2 [&>ul]:my-1 [&>ol]:my-1 [&>ul>li]:my-0.5 [&>ol>li]:my-0.5">
+                        <div className="max-w-none whitespace-pre-wrap text-base text-white">
                           {message.content}
                         </div>
                       )}
@@ -702,8 +772,20 @@ export function OnboardingChatbot() {
                   </Message>
                 ))}
 
-                {isLoading && (
-                  <Message from="assistant">
+                {/* Streaming message display */}
+                {isStreaming && streamingContent && (
+                  <Message from="assistant" hideAvatar>
+                    <MessageContent>
+                      <div className="max-w-none whitespace-pre-wrap text-base text-white">
+                        {streamingContent}
+                        <span className="ml-1 inline-block h-4 w-0.5 animate-pulse bg-white/50" />
+                      </div>
+                    </MessageContent>
+                  </Message>
+                )}
+
+                {(isLoading && !isStreaming) && (
+                  <Message from="assistant" hideAvatar>
                     <MessageContent>
                       <div className="flex h-8 items-center">
                         <div className="flex items-center gap-1 translate-y-[1px]">
@@ -720,9 +802,9 @@ export function OnboardingChatbot() {
                   <MessageError
                     error={error}
                     onRetry={() => {
-                      setError(null);
+                      setError(null)
                       if (messages.length === 0) {
-                        startConversation();
+                        startConversation()
                       }
                     }}
                   />
@@ -757,10 +839,10 @@ export function OnboardingChatbot() {
               <ConversationScrollButton />
             </Conversation>
 
-            <div className="bg-background px-4 pb-6 pt-4">
+            <div className="shrink-0 bg-background px-4 pb-6 pt-4">
               <PromptInput
                 onSubmit={handleSubmit}
-                className="mx-auto max-w-3xl [&_[data-slot=input-group]]:bg-card"
+                className="mx-auto max-w-3xl [&_[data-slot=input-group]]:bg-card [&_[data-slot=input-group]]:shadow-[0_1px_2px_rgba(0,0,0,0.08)] [&_[data-slot=input-group]]:focus-within:ring-0 [&_[data-slot=input-group]]:focus-within:border-border"
               >
                 <PromptInputBody>
                   <PromptInputTextarea
@@ -772,8 +854,8 @@ export function OnboardingChatbot() {
                         ? "Anything else you'd like to add?"
                         : "Type your response..."
                     }
-                    disabled={isLoading || isSaving || editingMessageId !== null}
-                    className="min-h-10"
+                    disabled={isLoading || isSaving || isStreaming || editingMessageId !== null}
+                    className="min-h-10 text-base"
                   />
                 </PromptInputBody>
                 <PromptInputFooter>
@@ -788,7 +870,8 @@ export function OnboardingChatbot() {
                     Skip
                   </Button>
                   <PromptInputSubmit
-                    disabled={isLoading || isSaving || editingMessageId !== null || !input.trim()}
+                    className="bg-accent text-accent-foreground hover:bg-accent/90"
+                    disabled={isLoading || isSaving || isStreaming || editingMessageId !== null || !input.trim()}
                   />
                 </PromptInputFooter>
               </PromptInput>
@@ -797,5 +880,5 @@ export function OnboardingChatbot() {
         )}
       </AnimatePresence>
     </div>
-  );
+  )
 }

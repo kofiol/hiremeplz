@@ -21,6 +21,7 @@ export type MessageProps = PropsWithChildren<
     avatarUrl?: string | null;
     avatarAlt?: string | null;
     avatarFallback?: string | null;
+    hideAvatar?: boolean;
   }
 >;
 
@@ -29,12 +30,13 @@ export function Message({
   avatarUrl,
   avatarAlt,
   avatarFallback,
+  hideAvatar = false,
   children,
   className,
   ...props
 }: MessageProps) {
   const isUser = from === "user";
-  const shouldShowUserAvatar = isUser && !!avatarUrl;
+  const shouldShowUserAvatar = isUser && !!avatarUrl && !hideAvatar;
 
   return (
     <div
@@ -45,30 +47,33 @@ export function Message({
       )}
       {...props}
     >
-      {shouldShowUserAvatar ? (
-        <Avatar className="size-8">
-          <AvatarImage src={avatarUrl ?? undefined} alt={avatarAlt ?? ""} />
-          <AvatarFallback>{avatarFallback ?? "?"}</AvatarFallback>
-        </Avatar>
-      ) : (
-        <div
-          className={cn(
-            "flex size-8 shrink-0 items-center justify-center rounded-full",
-            isUser
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground"
-          )}
-        >
-          {isUser ? (
-            <UserIcon className="size-4" />
-          ) : (
-            <BotIcon className="size-4" />
-          )}
-        </div>
+      {!hideAvatar && (
+        shouldShowUserAvatar ? (
+          <Avatar className="size-8">
+            <AvatarImage src={avatarUrl ?? undefined} alt={avatarAlt ?? ""} />
+            <AvatarFallback>{avatarFallback ?? "?"}</AvatarFallback>
+          </Avatar>
+        ) : (
+          <div
+            className={cn(
+              "flex size-8 shrink-0 items-center justify-center rounded-full",
+              isUser
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground"
+            )}
+          >
+            {isUser ? (
+              <UserIcon className="size-4" />
+            ) : (
+              <BotIcon className="size-4" />
+            )}
+          </div>
+        )
       )}
       <div
         className={cn(
-          "flex max-w-[80%] flex-col gap-1",
+          "flex flex-col gap-1",
+          hideAvatar ? "max-w-full" : "max-w-[80%]",
           isUser ? "items-end" : "items-start"
         )}
       >
@@ -109,8 +114,8 @@ export function MessageBubble({
       className={cn(
         "rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
         variant === "user"
-          ? "bg-primary text-primary-foreground rounded-br-md"
-          : "bg-muted text-foreground rounded-bl-md",
+          ? "bg-accent text-accent-foreground"
+          : "bg-muted text-foreground",
         className
       )}
       {...props}
@@ -133,7 +138,7 @@ export function MessageResponse({
     <div
       className={cn(
         "prose prose-sm dark:prose-invert max-w-none",
-        "rounded-2xl rounded-bl-md bg-muted px-4 py-2.5",
+        "rounded-[calc(var(--radius)+0.35rem)] rounded-bl-[calc(var(--radius)-0.25rem)] bg-muted px-4 py-2.5",
         "[&>p]:my-0 [&>p:not(:last-child)]:mb-2",
         "[&>ul]:my-1 [&>ol]:my-1",
         "[&>ul>li]:my-0.5 [&>ol>li]:my-0.5",
@@ -176,7 +181,7 @@ export function MessageLoading({ className, ...props }: MessageLoadingProps) {
   return (
     <div
       className={cn(
-        "flex items-center gap-1 rounded-2xl rounded-bl-md bg-muted px-4 py-3",
+        "flex items-center gap-1 rounded-[calc(var(--radius)+0.35rem)] rounded-bl-[calc(var(--radius)-0.25rem)] bg-muted px-4 py-3",
         className
       )}
       {...props}
@@ -202,7 +207,7 @@ export function MessageError({
   return (
     <div
       className={cn(
-        "flex flex-col gap-2 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm",
+        "flex flex-col gap-2 rounded-[var(--radius)] border border-destructive/50 bg-destructive/10 p-3 text-sm",
         className
       )}
       {...props}

@@ -1,37 +1,13 @@
-# Claude Code Guide • hiremeplz.app
+# Claude Code Guide - hiremeplz.app
 
 ## Tech Stack
-- **Frontend:** Next.js (App Router), React  
-- **Language & Modules:** TypeScript, ESM modules  
-- **Monorepo & Package Management:** pnpm + Turborepo  
-- **UI & Styling:** Tailwind CSS, shadcn/ui, Radix UI  
-- **State & Data:** Redux Toolkit, TanStack Table  
-- **AI & Automation:** OpenAI Agents SDK, trigger.dev  
-- **Testing & Quality:** Vitest, ESLint (flat config), Prettier  
-
-## Dev environment tips
-- Start the web app: `cd apps/web; pnpm dev`  
-- Build everything: `pnpm build`  
-- Lint all files: `pnpm lint`  
-- Type-check all: `pnpm check-types`  
-- Test everything: `pnpm test`  
-- For package-specific tasks, use Turbo filters: `pnpm turbo run <task> --filter <package_name>`
-
-## Code style & best practices
-- Use **double quotes**; omit semicolons  
-- Prefer **named exports**  
-- Keep functions **small, pure, and typed**  
-- Follow **shadcn/ui** patterns (`cn` util, `cva` variants, `data-*` attributes)  
-- Separate server/client logic and **never log secrets**  
-- Always consult skills in `skills/react-best-practices` for React best practices and `skills/web-design-guidelines` for web design guidelines.
-
-## PR instructions
-- Title format: `[<project_name>] <Title>`  
-- Always run `pnpm lint` and `pnpm test` before committing  
-- Add or update tests for any code changes
-
-## Rules:
-# Claude Code Guide • hiremeplz.app
+- **Frontend:** Next.js (App Router), React
+- **Language & Modules:** TypeScript, ESM modules
+- **Monorepo & Package Management:** pnpm + Turborepo
+- **UI & Styling:** Tailwind CSS, shadcn/ui, Radix UI
+- **State & Data:** Redux Toolkit, TanStack Table
+- **AI & Automation:** OpenAI Agents SDK, trigger.dev
+- **Testing & Quality:** Vitest, ESLint (flat config), Prettier
 
 ## Rules:
 
@@ -50,3 +26,26 @@ When an LLM is needed, please default to ChatGPT 5 Nano unless the user requests
 Please write a high-quality, general-purpose solution using the standard tools available. Do not create helper scripts or workarounds to accomplish the task more efficiently. Implement a solution that works correctly for all valid inputs, not just the test cases. Do not hard-code values or create solutions that only work for specific test inputs. Instead, implement the actual logic that solves the problem generally.
 
 Focus on understanding the problem requirements and implementing the correct algorithm. Tests are there to verify correctness, not to define the solution. Provide a principled implementation that follows best practices and software design principles.
+
+If the task is unreasonable or infeasible, or if any of the tests are incorrect, please inform me rather than working around them. The solution should be robust, maintainable, and extendable.
+
+## Dev environment tips
+- Start the web app: `cd apps/web; pnpm dev`
+- Build everything: `pnpm build`
+- Lint all files: `pnpm lint`
+- Type-check all: `pnpm check-types`
+- Test everything: `pnpm test`
+- For package-specific tasks, use Turbo filters: `pnpm turbo run <task> --filter <package_name>`
+
+## Code style & best practices
+- Use **double quotes**; omit semicolons
+- Prefer **named exports**
+- Keep functions **small, pure, and typed**
+- Follow **shadcn/ui** patterns (`cn` util, `cva` variants, `data-*` attributes)
+- Separate server/client logic and **never log secrets**
+- You MUST consult `skills/react-best-practices` and `skills/web-design-guidelines` for React and web guidelines prior to any significant code changes.
+
+## PR instructions
+- Title format: `[<project_name>] <Title>`
+- Always run `pnpm lint` and `pnpm test` before committing
+- Add or update tests for any code changes

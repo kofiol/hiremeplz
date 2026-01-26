@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Command, Home, Settings } from "lucide-react"
+import { Command, Home, Settings, PanelLeft } from "lucide-react"
 import Link from "next/link"
 
 import { NavMain } from "@/components/nav-main"
@@ -19,7 +19,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar"
+import { Button } from "@/components/ui/button"
 
 function getPlanLabel(plan: string | null) {
   if (!plan) return "Unknown plan"
@@ -34,6 +36,8 @@ const navMain = [{ title: "Overview", url: "/overview", icon: Home }]
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { session } = useSession()
   const { plan, displayName, email, isLoading } = useUserPlan()
+  const { state, toggleSidebar } = useSidebar()
+  const isCollapsed = state === "collapsed"
   const planLabel = isLoading ? "Loading plan" : getPlanLabel(plan)
   const emailFromSession = session?.user?.email ?? null
   const userNameFromSession =
@@ -59,22 +63,50 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   )
 
   return (
-    <Sidebar collapsible="icon" variant="sidebar"
-     {...props}>
+    <Sidebar collapsible="icon" variant="sidebar" {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link href="/overview">
-                <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-                  <Command className="size-4" />
+            {isCollapsed ? (
+              // When collapsed: show only the toggle button centered
+              <div className="flex items-center justify-center py-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleSidebar}
+                  className="size-8"
+                >
+                  <PanelLeft className="size-4" />
+                </Button>
+              </div>
+            ) : (
+              // When expanded: show logo + name + toggle button in a row
+              <SidebarMenuButton size="lg" asChild>
+                <div className="flex w-full items-center">
+                  <Link href="/overview" className="flex flex-1 items-center gap-2">
+                    <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
+                      <Command className="size-4" />
+                    </div>
+                    <div className="grid flex-1 text-left text-sm leading-tight">
+                      <span className="truncate font-medium">{resolvedName}</span>
+                      <span className="truncate text-xs">{planLabel}</span>
+                    </div>
+                  </Link>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      toggleSidebar()
+                    }}
+                    className="size-8 shrink-0"
+                  >
+                    <PanelLeft className="size-4" />
+                  </Button>
                 </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{resolvedName}</span>
-                  <span className="truncate text-xs">{planLabel}</span>
-                </div>
-              </Link>
-            </SidebarMenuButton>
+              </SidebarMenuButton>
+            )}
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>

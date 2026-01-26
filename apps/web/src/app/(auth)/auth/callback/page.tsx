@@ -49,23 +49,16 @@ export default function AuthCallbackPage() {
           });
 
           if (!response.ok) {
-            router.replace("/onboarding");
+            // Fallback to overview even on error, let the page handle it
+            router.replace("/overview");
             return;
           }
 
-          const payload = await response.json();
-          const completeness =
-            typeof payload.profile_completeness_score === "number"
-              ? payload.profile_completeness_score
-              : 0;
-
-          if (completeness >= 0.8) {
-            router.replace("/overview");
-          } else {
-            router.replace("/onboarding");
-          }
+          // Always redirect to overview, where onboarding is now handled
+          router.replace("/overview");
+          
         } catch {
-          router.replace("/onboarding");
+          router.replace("/overview");
         }
       }
 
