@@ -1161,7 +1161,7 @@ export function OnboardingChatbot() {
             {/* Input area wrapper — elevated above focus scrim */}
             <div
               ref={inputAreaRef}
-              className={`relative z-40 shrink-0 transition-all duration-150 ${showFocus ? "mx-auto w-[calc(100%-2rem)] max-w-3xl mb-4 rounded-2xl bg-card/95 p-6 ring-1 ring-white/10 shadow-2xl" : ""}`}
+              className={`relative z-40 shrink-0 transition-all duration-150 ${showFocus ? "mx-auto w-[calc(100%-2rem)] max-w-3xl mb-4 rounded-2xl p-6" : ""}`}
             >
             <div className={showFocus ? "" : "bg-background px-4 pb-6 pt-4"}>
               {/* Quick reply badges */}
