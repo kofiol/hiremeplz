@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { toast } from "sonner"
-import { SlidersHorizontal, UserRound } from "lucide-react"
+import { FlaskConical, SlidersHorizontal, UserRound } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -10,8 +10,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { useSession } from "@/app/auth/session-provider"
+import { useFocusMode } from "@/hooks/use-focus-mode"
 
-type SettingsSectionKey = "profile" | "job_search"
+type SettingsSectionKey = "profile" | "job_search" | "beta"
 
 type SettingsResponse = {
   profile: {
@@ -39,6 +40,7 @@ const sections: { key: SettingsSectionKey; label: string; icon: React.ElementTyp
   [
     { key: "profile", label: "Profile", icon: UserRound },
     { key: "job_search", label: "Job Search", icon: SlidersHorizontal },
+    { key: "beta", label: "Beta", icon: FlaskConical },
   ]
 
 export function SettingsPanel({
@@ -53,6 +55,7 @@ export function SettingsPanel({
   onSaveSuccess?: () => void
 }) {
   const { session } = useSession()
+  const [focusModeEnabled, setFocusModeEnabled] = useFocusMode()
 
   const [activeSection, setActiveSection] =
     React.useState<SettingsSectionKey>("profile")
@@ -477,6 +480,29 @@ export function SettingsPanel({
                     checked={remoteOnly}
                     onCheckedChange={(value) => setRemoteOnly(value === true)}
                     disabled={isLoading || !canLoad}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeSection === "beta" && (
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label>Focus Mode</Label>
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                    BETA
+                  </span>
+                </div>
+                <p className="text-muted-foreground text-sm">
+                  After the AI responds, dim the rest of the page so you can focus on your reply.
+                </p>
+                <div className="border-input flex items-center justify-between rounded-md border px-3 py-2">
+                  <span className="text-sm">Enable Focus Mode</span>
+                  <Checkbox
+                    checked={focusModeEnabled}
+                    onCheckedChange={(value) => setFocusModeEnabled(value === true)}
                   />
                 </div>
               </div>

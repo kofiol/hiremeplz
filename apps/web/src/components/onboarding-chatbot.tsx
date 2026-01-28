@@ -5,6 +5,7 @@ import { useCallback, useState, useRef, useEffect } from "react"
 import Image from "next/image"
 import { AnimatePresence, motion } from "framer-motion"
 import { useSession } from "@/app/auth/session-provider"
+import { useFocusMode } from "@/hooks/use-focus-mode"
 import { useUserPlan } from "@/hooks/use-user-plan"
 import {
   Conversation,
@@ -25,16 +26,23 @@ import {
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input"
 import { Button } from "@/components/ui/button"
-import { Check, Pencil, X } from "lucide-react"
+import { Check, CheckCircle, LoaderIcon, Pencil, X, XCircle } from "lucide-react"
 
 // ============================================================================
 // Types
 // ============================================================================
 
+type ToolCallInfo = {
+  name: string
+  status: "completed" | "failed"
+  elapsed?: number
+}
+
 type ChatMessage = {
   id: string
   role: "user" | "assistant"
   content: string
+  toolCall?: ToolCallInfo
 }
 
 type CollectedData = {
@@ -108,6 +116,33 @@ const initialCollectedData: CollectedData = {
 
 function generateId() {
   return Math.random().toString(36).slice(2)
+}
+
+function getSuggestedReplies(data: CollectedData): string[] {
+  // Step 1: Solo or team?
+  if (data.teamMode === null) {
+    return ["Solo", "Team"]
+  }
+  // Step 2: Profile setup method
+  if (data.profilePath === null) {
+    return ["Import from LinkedIn", "Share a portfolio link", "Tell you manually"]
+  }
+  // Step 3 (manual path): Experience level
+  if (
+    data.profilePath === "manual" &&
+    data.experienceLevel === null
+  ) {
+    return ["Entry level", "Mid level", "Senior", "Lead"]
+  }
+  // Step 4: Engagement type
+  if (data.engagementTypes === null) {
+    return ["Full-time", "Part-time", "Both"]
+  }
+  // Step 5: Remote preference
+  if (data.remoteOnly === null) {
+    return ["Remote only", "Open to on-site", "Either works"]
+  }
+  return []
 }
 
 // Transform collected data to the format expected by the onboarding API
@@ -208,6 +243,26 @@ export function OnboardingChatbot() {
     elapsed?: number
   } | null>(null)
 
+  // Quick reply suggestions
+  const suggestedReplies = React.useMemo(
+    () => getSuggestedReplies(collectedData),
+    [collectedData]
+  )
+
+  // Focus mode
+  const [focusModeEnabled] = useFocusMode()
+  const [showFocus, setShowFocus] = useState(false)
+  const inputAreaRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!isLoading && !isStreaming && focusModeEnabled && messages.length > 0 && hasStarted) {
+      const timer = setTimeout(() => setShowFocus(true), 100)
+      return () => clearTimeout(timer)
+    } else {
+      setShowFocus(false)
+    }
+  }, [isLoading, isStreaming, focusModeEnabled, messages.length, hasStarted])
+
   // Load progress on mount
   useEffect(() => {
     async function loadProgress() {
@@ -287,7 +342,12 @@ export function OnboardingChatbot() {
     }
 
     const decoder = new TextDecoder()
-    let fullContent = ""
+    let fillerContent = ""
+    let summaryContent = ""
+    let toolCallSeen = false
+    let toolCallFinished = false
+    let toolCallResult: ToolCallInfo | null = null
+    let lastElapsed: number | undefined
     let finalCollectedData = currentCollectedData
 
     setIsStreaming(true)
@@ -311,10 +371,16 @@ export function OnboardingChatbot() {
             const parsed = JSON.parse(data)
 
             if (parsed.type === "text") {
-              fullContent += parsed.content
-              setStreamingContent(fullContent)
+              if (!toolCallSeen || !toolCallFinished) {
+                fillerContent += parsed.content
+                setStreamingContent(fillerContent)
+              } else {
+                summaryContent += parsed.content
+                setStreamingContent(summaryContent)
+              }
             } else if (parsed.type === "tool_call") {
               if (parsed.status === "started") {
+                toolCallSeen = true
                 setActiveToolCall({
                   name: parsed.name,
                   status: "running",
@@ -323,9 +389,17 @@ export function OnboardingChatbot() {
                 parsed.status === "completed" ||
                 parsed.status === "failed"
               ) {
+                toolCallFinished = true
+                toolCallResult = {
+                  name: parsed.name ?? "linkedin_scrape",
+                  status: parsed.status as "completed" | "failed",
+                  elapsed: lastElapsed,
+                }
                 setActiveToolCall(null)
+                setStreamingContent("")
               }
             } else if (parsed.type === "tool_status") {
+              lastElapsed = parsed.elapsed
               setActiveToolCall((prev) =>
                 prev
                   ? { ...prev, elapsed: parsed.elapsed }
@@ -347,13 +421,42 @@ export function OnboardingChatbot() {
       setActiveToolCall(null)
     }
 
-    const assistantMessage: ChatMessage = {
-      id: generateId(),
-      role: "assistant",
-      content: fullContent,
+    // Build messages — split into filler, tool badge, and summary when a tool call occurred
+    const newMessages: ChatMessage[] = []
+
+    if (toolCallResult) {
+      if (fillerContent.trim()) {
+        newMessages.push({
+          id: generateId(),
+          role: "assistant",
+          content: fillerContent.trim(),
+        })
+      }
+      newMessages.push({
+        id: generateId(),
+        role: "assistant",
+        content: "",
+        toolCall: toolCallResult,
+      })
+      if (summaryContent.trim()) {
+        newMessages.push({
+          id: generateId(),
+          role: "assistant",
+          content: summaryContent.trim(),
+        })
+      }
+    } else {
+      const combined = (fillerContent + summaryContent).trim()
+      if (combined) {
+        newMessages.push({
+          id: generateId(),
+          role: "assistant",
+          content: combined,
+        })
+      }
     }
 
-    const finalMessages = [...updatedMessages, assistantMessage]
+    const finalMessages = [...updatedMessages, ...newMessages]
     setMessages(finalMessages)
     setCollectedData(finalCollectedData)
 
@@ -406,6 +509,7 @@ export function OnboardingChatbot() {
           setCollectedData(newData)
         }
 
+
         saveProgress(newMessages, newData, newHasStarted)
       }
     } catch (err) {
@@ -431,6 +535,7 @@ export function OnboardingChatbot() {
       const updatedMessages = [...messages, userMessage]
       setMessages(updatedMessages)
       setInput("")
+
       setIsLoading(true)
       setError(null)
 
@@ -438,10 +543,12 @@ export function OnboardingChatbot() {
       saveProgress(updatedMessages, collectedData, hasStarted)
 
       try {
-        const conversationHistory = updatedMessages.map((m) => ({
-          role: m.role,
-          content: m.content,
-        }))
+        const conversationHistory = updatedMessages
+          .filter((m) => !m.toolCall)
+          .map((m) => ({
+            role: m.role,
+            content: m.content,
+          }))
 
         const response = await fetch("/api/v1/onboarding/chat", {
           method: "POST",
@@ -481,7 +588,6 @@ export function OnboardingChatbot() {
             finalData = data.collectedData
             setCollectedData(finalData)
           }
-
           saveProgress(finalMessages, finalData, hasStarted)
         }
       } catch (err) {
@@ -523,10 +629,12 @@ export function OnboardingChatbot() {
       content: trimmed,
     }
 
-    const conversationHistory = historyBefore.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }))
+    const conversationHistory = historyBefore
+      .filter((m) => !m.toolCall)
+      .map((m) => ({
+        role: m.role,
+        content: m.content,
+      }))
 
     // Immediately update UI to show edited message and remove following messages
     const messagesWithEdit = [...historyBefore, updatedUserMessage]
@@ -572,6 +680,7 @@ export function OnboardingChatbot() {
 
         const nextCollectedData: CollectedData = data.collectedData ?? initialCollectedData
         setCollectedData(nextCollectedData)
+
 
         saveProgress(nextMessages, nextCollectedData, hasStarted)
       }
@@ -630,6 +739,23 @@ export function OnboardingChatbot() {
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
+      {/* Focus mode scrim — outside AnimatePresence to avoid transform containment */}
+      <AnimatePresence>
+        {showFocus && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-30 bg-black/50"
+            onClick={() => {
+              setShowFocus(false)
+              textareaRef.current?.focus()
+            }}
+          />
+        )}
+      </AnimatePresence>
+
       <AnimatePresence mode="wait">
         {!hasStarted ? (
           // Welcome state - centered input
@@ -747,6 +873,20 @@ export function OnboardingChatbot() {
                             </div>
                           )}
                         </div>
+                      ) : message.toolCall ? (
+                        <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm text-muted-foreground">
+                          {message.toolCall.status === "completed" ? (
+                            <CheckCircle className="size-3.5 text-green-500" />
+                          ) : (
+                            <XCircle className="size-3.5 text-red-500" />
+                          )}
+                          <span>
+                            Fetched LinkedIn profile
+                            {message.toolCall.elapsed
+                              ? ` (${message.toolCall.elapsed}s)`
+                              : ""}
+                          </span>
+                        </div>
                       ) : (
                         <div className="max-w-none whitespace-pre-wrap text-base text-white">
                           {message.content}
@@ -768,12 +908,12 @@ export function OnboardingChatbot() {
                   </Message>
                 )}
 
-                {/* Tool invocation badge */}
+                {/* Tool invocation badge (live during streaming) */}
                 {activeToolCall && (
                   <Message from="assistant" hideAvatar>
                     <MessageContent>
                       <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm text-muted-foreground">
-                        <span className="size-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                        <LoaderIcon className="size-3.5 animate-spin text-primary" />
                         <span>
                           Fetching LinkedIn profile
                           {activeToolCall.elapsed
@@ -815,7 +955,32 @@ export function OnboardingChatbot() {
               </ConversationContent>
             </Conversation>
 
-            <div className="shrink-0 bg-background px-4 pb-6 pt-4">
+            {/* Input area wrapper — elevated above focus scrim */}
+            <div
+              ref={inputAreaRef}
+              className={`relative z-40 shrink-0 transition-all duration-150 ${showFocus ? "mx-4 mb-4 rounded-2xl bg-card/95 p-6 ring-1 ring-white/10 shadow-2xl backdrop-blur-sm" : ""}`}
+            >
+            <div className={showFocus ? "" : "bg-background px-4 pb-6 pt-4"}>
+              {/* Quick reply badges */}
+              {hasStarted && !isLoading && !isStreaming && suggestedReplies.length > 0 && editingMessageId === null && (
+                <div className="mx-auto max-w-3xl pb-2">
+                  <div className="flex flex-wrap gap-2">
+                    {suggestedReplies.map((reply) => (
+                      <button
+                        key={reply}
+                        type="button"
+                        onClick={() => {
+                          setShowFocus(false)
+                          sendMessage(reply)
+                        }}
+                        className="rounded-full border bg-card px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                      >
+                        {reply}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <PromptInput
                 onSubmit={handleSubmit}
                 className="mx-auto max-w-3xl [&_[data-slot=input-group]]:bg-card [&_[data-slot=input-group]]:shadow-[0_1px_2px_rgba(0,0,0,0.08)] [&_[data-slot=input-group]]:focus-within:ring-0 [&_[data-slot=input-group]]:focus-within:border-border"
@@ -824,7 +989,11 @@ export function OnboardingChatbot() {
                   <PromptInputTextarea
                     ref={textareaRef}
                     value={input}
-                    onChange={(e) => setInput(e.target.value)}
+                    onChange={(e) => {
+                      setInput(e.target.value)
+                      setShowFocus(false)
+                    }}
+                    onFocus={() => setShowFocus(false)}
                     placeholder="Type your response..."
                     disabled={editingMessageId !== null}
                     className="min-h-10 text-base"
@@ -837,6 +1006,7 @@ export function OnboardingChatbot() {
                   />
                 </PromptInputFooter>
               </PromptInput>
+            </div>
             </div>
           </motion.div>
         )}
