@@ -1,20 +1,17 @@
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback } from "react"
 
 const STORAGE_KEY = "hiremeplz:linkedin-popup"
 
 export function useLinkedinPopup(): [boolean, (enabled: boolean) => void] {
-  const [enabled, setEnabledState] = useState(false)
-
-  useEffect(() => {
+  const [enabled, setEnabledState] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false
     try {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored === "true") {
-        setEnabledState(true)
-      }
+      const stored = window.localStorage.getItem(STORAGE_KEY)
+      return stored === "true"
     } catch {
-      // localStorage unavailable
+      return false
     }
-  }, [])
+  })
 
   const setEnabled = useCallback((value: boolean) => {
     setEnabledState(value)

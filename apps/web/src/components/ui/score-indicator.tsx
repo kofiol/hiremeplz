@@ -175,7 +175,7 @@ export function ProfileScoreCard({
                   {userName}
                 </p>
               )}
-              <h3 className="truncate text-base font-semibold tracking-tight">
+              <h3 className="truncate text-lg font-semibold tracking-tight sm:text-xl">
                 {title}
               </h3>
             </div>

@@ -830,7 +830,7 @@ export function OnboardingChatbot() {
         body: JSON.stringify({
           message: trimmed,
           conversationHistory,
-          collectedData: initialCollectedData,
+          collectedData,
           stream: true,
         }),
       })
@@ -843,7 +843,7 @@ export function OnboardingChatbot() {
       const contentType = response.headers.get("content-type")
 
       if (contentType?.includes("text/event-stream")) {
-        await processStreamResponse(response, messagesWithEdit, initialCollectedData, hasStarted)
+        await processStreamResponse(response, messagesWithEdit, collectedData, hasStarted)
       } else {
         // Fallback for non-streaming response
         const data = await response.json()
@@ -857,7 +857,7 @@ export function OnboardingChatbot() {
         const nextMessages = [...messagesWithEdit, assistantMessage]
         setMessages(nextMessages)
 
-        const nextCollectedData: CollectedData = data.collectedData ?? initialCollectedData
+        const nextCollectedData: CollectedData = data.collectedData ?? collectedData
         setCollectedData(nextCollectedData)
 
 
@@ -875,6 +875,7 @@ export function OnboardingChatbot() {
     isLoading,
     isStreaming,
     messages,
+    collectedData,
     processStreamResponse,
     saveProgress,
     session?.access_token,
@@ -1168,26 +1169,6 @@ export function OnboardingChatbot() {
                       <div className="max-w-none whitespace-pre-wrap text-base text-white">
                         {streamingContent}
                         <span className="ml-1 inline-block h-4 w-0.5 animate-pulse bg-white/50" />
-                      </div>
-                    </MessageContent>
-                  </Message>
-                )}
-
-                {/* Tool invocation badge (live during streaming) */}
-                {activeToolCall && (
-                  <Message from="assistant" hideAvatar>
-                    <MessageContent>
-                      <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm text-muted-foreground">
-                        <LoaderIcon className="size-3.5 animate-spin text-primary" />
-                        <span>
-                          {activeToolCall.name === "profile_analysis"
-                            ? "Analyzing your profile"
-                            : "Fetching LinkedIn profile"}
-                          {activeToolCall.elapsed
-                            ? ` (${activeToolCall.elapsed}s)`
-                            : ""}
-                          ...
-                        </span>
                       </div>
                     </MessageContent>
                   </Message>
