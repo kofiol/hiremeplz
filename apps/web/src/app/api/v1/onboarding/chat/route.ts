@@ -943,7 +943,7 @@ Provide a score (0-100), brief summary, and detailed markdown analysis.`
               const profileAnalysisAgent = new Agent({
                 name: "Profile Analyst",
                 instructions: PROFILE_ANALYSIS_INSTRUCTIONS,
-                model: "gpt-5",
+                model: "gpt-5-mini",
                 outputType: ProfileAnalysisJsonSchema,
               })
 

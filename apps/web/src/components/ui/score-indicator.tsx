@@ -133,13 +133,10 @@ export function ProfileScoreCard({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-2xl border bg-gradient-to-b from-card to-card/80 p-5 shadow-lg",
+        "relative overflow-hidden rounded-2xl border bg-card p-5",
         className
       )}
     >
-      {/* Subtle gradient overlay */}
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
-
       <div className="relative flex items-center gap-5">
         {/* Gauge on the left */}
         <div className="shrink-0">

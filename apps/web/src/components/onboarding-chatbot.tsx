@@ -1147,14 +1147,14 @@ export function OnboardingChatbot() {
                             title={message.profileAnalysis.title}
                             summary={message.profileAnalysis.summary}
                           />
-                          <div className="prose prose-base prose-invert max-w-none">
+                          <div className="prose prose-base prose-invert max-w-none text-foreground prose-headings:text-white prose-strong:text-white">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
                               {message.profileAnalysis.analysis}
                             </ReactMarkdown>
                           </div>
                         </div>
                       ) : (
-                        <div className="max-w-none whitespace-pre-wrap text-base text-white">
+                        <div className="max-w-none whitespace-pre-wrap text-base text-foreground">
                           {message.content}
                         </div>
                       )}
@@ -1166,9 +1166,9 @@ export function OnboardingChatbot() {
                 {isStreaming && streamingContent && (
                   <Message from="assistant" hideAvatar>
                     <MessageContent>
-                      <div className="max-w-none whitespace-pre-wrap text-base text-white">
+                      <div className="max-w-none whitespace-pre-wrap text-base text-foreground">
                         {streamingContent}
-                        <span className="ml-1 inline-block h-4 w-0.5 animate-pulse bg-white/50" />
+                        <span className="ml-1 inline-block h-4 w-0.5 animate-pulse bg-foreground/50" />
                       </div>
                     </MessageContent>
                   </Message>

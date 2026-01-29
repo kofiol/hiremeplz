@@ -16,6 +16,7 @@ import {
   SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuBadge,
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
@@ -29,6 +30,7 @@ export function NavMain({
     title: string
     url: string
     icon: LucideIcon
+    badge?: string
     isActive?: boolean
     items?: {
       title: string
@@ -62,6 +64,7 @@ export function NavMain({
                   <span>{item.title}</span>
                 </Link>
               </SidebarMenuButton>
+              {item.badge && <SidebarMenuBadge>{item.badge}</SidebarMenuBadge>}
               {item.items?.length ? (
                 <>
                   <CollapsibleTrigger asChild>
