@@ -9,6 +9,14 @@
 - **AI & Automation:** OpenAI Agents SDK, trigger.dev
 - **Testing & Quality:** Vitest, ESLint (flat config), Prettier
 
+## Current Focus
+
+- **In Progress 🚀:** `/overview` agent development (context injection, tool usage, reasoning improvements)
+- **In Progress 🚀:** Onboarding flow (UX improvements)
+- **Complete ✅:** LinkedIn profile scraping via BrightData
+- **Abandoned:** Job scraping and job matching (resuming soon - DO NOT take for context)
+- **Architecture:** Single-user focused (one freelancer per account with team context for future expansion)
+
 ## Rules:
 
 After completing a task that involves tool use, provide a quick summary of the work you've done

@@ -4,7 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-hiremeplz.app is a personal AI agent for finding freelance work. It's a Next.js monorepo that combines job scraping, AI-powered candidate matching, and a web application for managing freelance opportunities.
+hiremeplz.app is a personal AI agent for finding freelance work. It's a Next.js monorepo focused on onboarding, profile enrichment, and agent-driven opportunity discovery.
+
+**Current Focus:**
+- `/overview` agent development (context injection, tool usage, reasoning) 🚀
+- Onboarding UX improvements 🚀
+- LinkedIn profile scraping (fully working) ✅
+
+**Architecture:** Single-user (one freelancer per account with team context for future expansion)
 
 ## Monorepo Structure
 
@@ -121,6 +128,16 @@ Copy `.env.example` to `.env.local` and configure:
 - **Database:** `DATABASE_URL` (PostgreSQL connection string)
 
 For local development: Supabase runs on `http://localhost:54321`.
+
+## Abandoned Features
+
+**Do NOT include these in context injections or code reviews:**
+
+- Job scraping (Apify, BrightData job datasets) - `/apps/web/src/app/api/v1/jobs/`
+- Job matching logic - related playground code
+- These will be resumed soon, but are currently suspended
+
+See `/apps/web/src/app/api/v1/jobs/README.md` and `/playground/README.md` for details.
 
 ## Before Committing
 
