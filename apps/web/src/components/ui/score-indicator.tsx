@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Image from "next/image"
 import { cn } from "@/lib/utils"
 
 const DEFAULT_COLORS = [
@@ -111,6 +112,8 @@ type ProfileScoreCardProps = {
   score: number
   title: string
   summary: string
+  userName?: string
+  userAvatar?: string
   className?: string
 }
 
@@ -118,6 +121,8 @@ export function ProfileScoreCard({
   score,
   title,
   summary,
+  userName,
+  userAvatar,
   className,
 }: ProfileScoreCardProps) {
   const getScoreLabel = () => {
@@ -131,25 +136,56 @@ export function ProfileScoreCard({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-2xl border bg-gradient-to-b from-card to-card/80 p-6 text-center shadow-lg",
+        "relative overflow-hidden rounded-2xl border bg-gradient-to-b from-card to-card/80 p-5 shadow-lg",
         className
       )}
     >
       {/* Subtle gradient overlay */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
 
-      <div className="relative flex flex-col items-center gap-4">
-        <ScoreIndicator
-          value={score}
-          maxValue={100}
-          size={140}
-          strokeWidth={10}
-          label={getScoreLabel()}
-        />
+      <div className="relative flex items-center gap-5">
+        {/* Gauge on the left */}
+        <div className="shrink-0">
+          <ScoreIndicator
+            value={score}
+            maxValue={100}
+            size={100}
+            strokeWidth={8}
+            label={getScoreLabel()}
+          />
+        </div>
 
-        <div className="space-y-1">
-          <h3 className="text-lg font-semibold tracking-tight">{title}</h3>
-          <p className="text-sm text-muted-foreground">{summary}</p>
+        {/* User info on the right */}
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <div className="flex items-center gap-3">
+            {userAvatar ? (
+              <Image
+                src={userAvatar}
+                alt={userName || "User avatar"}
+                width={40}
+                height={40}
+                className="size-10 shrink-0 rounded-full object-cover ring-2 ring-border"
+                unoptimized
+              />
+            ) : userName ? (
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                {userName.charAt(0).toUpperCase()}
+              </div>
+            ) : null}
+            <div className="min-w-0">
+              {userName && (
+                <p className="truncate text-sm font-medium text-foreground">
+                  {userName}
+                </p>
+              )}
+              <h3 className="truncate text-base font-semibold tracking-tight">
+                {title}
+              </h3>
+            </div>
+          </div>
+          <p className="text-sm leading-relaxed text-muted-foreground line-clamp-2">
+            {summary}
+          </p>
         </div>
       </div>
     </div>

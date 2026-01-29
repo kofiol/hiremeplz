@@ -62,19 +62,7 @@ const CollectedDataSchema = z.object({
   remoteOnly: z.union([z.boolean(), z.null()]),
 })
 
-// Data extraction response schema
-const DataExtractionResponseSchema = z.object({
-  collectedData: CollectedDataSchema.describe(
-    "All data collected so far, merged with any new data from the confirmed conversation. Keep all previously collected data."
-  ),
-  isComplete: z
-    .boolean()
-    .describe(
-      "True only when ALL required fields have been collected: teamMode, profilePath (and corresponding URL if applicable), and at least some preferences (hourlyMin or fixedBudgetMin, currency)"
-    ),
-})
-
-type DataExtractionResponse = z.infer<typeof DataExtractionResponseSchema>
+type CollectedData = z.infer<typeof CollectedDataSchema>
 
 // Profile Analysis Response Schema
 const ProfileAnalysisResponseSchema = z.object({
@@ -99,147 +87,6 @@ const ProfileAnalysisJsonSchema = {
       title: { type: "string" },
       summary: { type: "string" },
       analysis: { type: "string" },
-    },
-  },
-}
-
-const nullableString = { type: ["string", "null"] } as const
-const nullableNumber = { type: ["number", "null"] } as const
-const nullableBoolean = { type: ["boolean", "null"] } as const
-const nullableEnum = (values: string[]) => ({
-  anyOf: [{ type: "string", enum: values }, { type: "null" }],
-})
-
-const DataExtractionJsonSchema = {
-  type: "json_schema" as const,
-  name: "DataExtractionResponse",
-  strict: true,
-  schema: {
-    type: "object" as const,
-    additionalProperties: false,
-    required: ["collectedData", "isComplete"],
-    properties: {
-      collectedData: {
-        type: "object" as const,
-        additionalProperties: false,
-        required: [
-          "teamMode",
-          "profilePath",
-          "linkedinUrl",
-          "upworkUrl",
-          "portfolioUrl",
-          "experienceLevel",
-          "skills",
-          "experiences",
-          "educations",
-          "hourlyMin",
-          "hourlyMax",
-          "fixedBudgetMin",
-          "currency",
-          "preferredProjectLengthMin",
-          "preferredProjectLengthMax",
-          "timeZones",
-          "engagementTypes",
-          "remoteOnly",
-        ],
-        properties: {
-          teamMode: nullableEnum(["solo", "team"]),
-          profilePath: nullableEnum(["linkedin", "upwork", "cv", "portfolio", "manual"]),
-          linkedinUrl: nullableString,
-          upworkUrl: nullableString,
-          portfolioUrl: nullableString,
-          experienceLevel: nullableEnum([
-            "intern_new_grad",
-            "entry",
-            "mid",
-            "senior",
-            "lead",
-            "director",
-          ]),
-          skills: {
-            anyOf: [
-              {
-                type: "array",
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["name"],
-                  properties: {
-                    name: { type: "string" },
-                  },
-                },
-              },
-              { type: "null" },
-            ],
-          },
-          experiences: {
-            anyOf: [
-              {
-                type: "array",
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["title", "company", "startDate", "endDate", "highlights"],
-                  properties: {
-                    title: { type: "string" },
-                    company: nullableString,
-                    startDate: nullableString,
-                    endDate: nullableString,
-                    highlights: nullableString,
-                  },
-                },
-              },
-              { type: "null" },
-            ],
-          },
-          educations: {
-            anyOf: [
-              {
-                type: "array",
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["school", "degree", "field", "startYear", "endYear"],
-                  properties: {
-                    school: { type: "string" },
-                    degree: nullableString,
-                    field: nullableString,
-                    startYear: nullableString,
-                    endYear: nullableString,
-                  },
-                },
-              },
-              { type: "null" },
-            ],
-          },
-          hourlyMin: nullableNumber,
-          hourlyMax: nullableNumber,
-          fixedBudgetMin: nullableNumber,
-          currency: nullableEnum(["USD", "EUR", "GBP", "CAD", "AUD"]),
-          preferredProjectLengthMin: nullableNumber,
-          preferredProjectLengthMax: nullableNumber,
-          timeZones: {
-            anyOf: [
-              { type: "array", items: { type: "string" } },
-              { type: "null" },
-            ],
-          },
-          engagementTypes: {
-            anyOf: [
-              {
-                type: "array",
-                items: {
-                  type: "string",
-                  enum: ["full_time", "part_time", "internship"],
-                },
-              },
-              { type: "null" },
-            ],
-          },
-          remoteOnly: nullableBoolean,
-        },
-      },
-      isComplete: { type: "boolean" },
     },
   },
 }
@@ -302,164 +149,465 @@ function readEnvLocalValue(key: string) {
 }
 
 // ============================================================================
+// SIMPLE DETERMINISTIC EXTRACTION (No AI needed!)
+// ============================================================================
+
+/**
+ * Extract teamMode from user message
+ */
+function extractTeamMode(message: string): "solo" | "team" | null {
+  const lower = message.toLowerCase()
+  if (/\b(solo|alone|just me|by myself|individual)\b/.test(lower)) {
+    return "solo"
+  }
+  if (/\b(team|group|we|us|together|partners?)\b/.test(lower)) {
+    return "team"
+  }
+  return null
+}
+
+/**
+ * Extract profile path from user message
+ */
+function extractProfilePath(message: string): "linkedin" | "manual" | null {
+  const lower = message.toLowerCase()
+  if (/linkedin/.test(lower) || /import/.test(lower)) {
+    return "linkedin"
+  }
+  if (/manual|tell you|myself|type/.test(lower)) {
+    return "manual"
+  }
+  return null
+}
+
+/**
+ * Extract hourly rate from user message
+ * Handles: "$50-100", "50-100/hr", "€50-80", "£40-60", etc.
+ */
+function extractHourlyRate(message: string): {
+  hourlyMin: number | null
+  hourlyMax: number | null
+  currency: "USD" | "EUR" | "GBP" | "CAD" | "AUD" | null
+} {
+  // Detect currency from symbols
+  let currency: "USD" | "EUR" | "GBP" | "CAD" | "AUD" | null = null
+  if (message.includes("$")) currency = "USD"
+  else if (message.includes("€")) currency = "EUR"
+  else if (message.includes("£")) currency = "GBP"
+
+  // Extract numbers - look for patterns like "50-100", "$50-$100", "50 to 100"
+  const rangeMatch = message.match(/(\d+)\s*[-–—to]+\s*(\d+)/)
+  if (rangeMatch) {
+    return {
+      hourlyMin: parseInt(rangeMatch[1], 10),
+      hourlyMax: parseInt(rangeMatch[2], 10),
+      currency: currency || "USD", // Default to USD
+    }
+  }
+
+  // Single number
+  const singleMatch = message.match(/(\d+)/)
+  if (singleMatch) {
+    const num = parseInt(singleMatch[1], 10)
+    return {
+      hourlyMin: num,
+      hourlyMax: null,
+      currency: currency || "USD",
+    }
+  }
+
+  return { hourlyMin: null, hourlyMax: null, currency: null }
+}
+
+/**
+ * Extract engagement type from user message
+ */
+function extractEngagementType(message: string): ("full_time" | "part_time")[] | null {
+  const lower = message.toLowerCase()
+  const types: ("full_time" | "part_time")[] = []
+
+  if (/full[- ]?time|full time/.test(lower)) {
+    types.push("full_time")
+  }
+  if (/part[- ]?time|part time/.test(lower)) {
+    types.push("part_time")
+  }
+  if (/both/.test(lower)) {
+    return ["full_time", "part_time"]
+  }
+
+  return types.length > 0 ? types : null
+}
+
+/**
+ * Extract remote preference from user message
+ */
+function extractRemotePreference(message: string): boolean | null {
+  const lower = message.toLowerCase()
+
+  if (/remote only|only remote|strictly remote|100% remote/.test(lower)) {
+    return true
+  }
+  if (/remote/.test(lower) && !/on[- ]?site|hybrid|office/.test(lower)) {
+    return true
+  }
+  if (/on[- ]?site|office|in[- ]?person|hybrid|either|both|open to/.test(lower)) {
+    return false
+  }
+
+  return null
+}
+
+/**
+ * Extract experience level from user message
+ */
+function extractExperienceLevel(
+  message: string
+): "intern_new_grad" | "entry" | "mid" | "senior" | "lead" | "director" | null {
+  const lower = message.toLowerCase()
+
+  if (/director|executive|c-level|cto|ceo|vp|vice president/.test(lower)) {
+    return "director"
+  }
+  if (/lead|principal|staff|architect|head/.test(lower)) {
+    return "lead"
+  }
+  if (/senior|sr\.?|expert|experienced/.test(lower)) {
+    return "senior"
+  }
+  if (/mid[- ]?level|intermediate|moderate/.test(lower)) {
+    return "mid"
+  }
+  if (/entry|junior|jr\.?|beginner/.test(lower)) {
+    return "entry"
+  }
+  if (/intern|new grad|graduate|student|fresher/.test(lower)) {
+    return "intern_new_grad"
+  }
+
+  return null
+}
+
+/**
+ * Check if all required data is collected for profile analysis
+ */
+function isProfileComplete(data: Partial<CollectedData>): boolean {
+  // For LinkedIn profiles: skills/experiences come from LinkedIn, we only need preferences
+  if (data.profilePath === "linkedin") {
+    return !!(
+      data.teamMode &&
+      (data.hourlyMin !== null || data.hourlyMax !== null) &&
+      data.engagementTypes?.length &&
+      data.remoteOnly !== null
+    )
+  }
+
+  // For manual profiles: need skills, experiences, educations, experienceLevel too
+  return !!(
+    data.teamMode &&
+    data.profilePath &&
+    data.experienceLevel &&
+    data.skills?.length &&
+    data.experiences?.length &&
+    data.educations?.length &&
+    (data.hourlyMin !== null || data.hourlyMax !== null) &&
+    data.engagementTypes?.length &&
+    data.remoteOnly !== null
+  )
+}
+
+/**
+ * Extract skills from user message
+ * Handles: comma-separated skills, "and" separated, etc.
+ */
+function extractSkills(message: string): { name: string }[] | null {
+  // Don't extract from very short messages or navigation words
+  if (message.length < 5) return null
+  if (/^(yes|no|ok|sure|thanks|next|skip)$/i.test(message.trim())) return null
+
+  // Split by common separators
+  const parts = message
+    .split(/[,;]|\band\b/i)
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 2 && s.length <= 50)
+
+  if (parts.length > 0) {
+    return parts.map((name) => ({ name }))
+  }
+
+  // Single skill (if message is reasonable length)
+  if (message.trim().length >= 2 && message.trim().length <= 100) {
+    return [{ name: message.trim() }]
+  }
+
+  return null
+}
+
+/**
+ * Extract experience from user message
+ * Looks for patterns like "Software Engineer at Google for 3 years" or "Senior Dev, Microsoft, 2020-2023"
+ */
+function extractExperience(message: string): ExperienceSchema[] | null {
+  // Don't extract from very short messages
+  if (message.length < 10) return null
+  if (/^(yes|no|ok|sure|thanks|next|skip)$/i.test(message.trim())) return null
+
+  // Look for "at" pattern: "Title at Company"
+  const atMatch = message.match(/(.+?)\s+at\s+(.+?)(?:\s+for\s+(.+?))?(?:\.|,|$)/i)
+  if (atMatch) {
+    return [{
+      title: atMatch[1].trim(),
+      company: atMatch[2].trim(),
+      startDate: null,
+      endDate: null,
+      highlights: atMatch[3] ? atMatch[3].trim() : null,
+    }]
+  }
+
+  // Look for comma-separated: "Title, Company"
+  const commaMatch = message.match(/^([^,]+),\s*([^,]+)(?:,\s*(.+))?$/i)
+  if (commaMatch) {
+    return [{
+      title: commaMatch[1].trim(),
+      company: commaMatch[2].trim(),
+      startDate: null,
+      endDate: null,
+      highlights: commaMatch[3] ? commaMatch[3].trim() : null,
+    }]
+  }
+
+  // If nothing matched but message is substantial, treat whole message as experience info
+  if (message.trim().length >= 15) {
+    return [{
+      title: message.trim(),
+      company: null,
+      startDate: null,
+      endDate: null,
+      highlights: null,
+    }]
+  }
+
+  return null
+}
+
+type ExperienceSchema = {
+  title: string
+  company: string | null
+  startDate: string | null
+  endDate: string | null
+  highlights: string | null
+}
+
+type EducationSchema = {
+  school: string
+  degree: string | null
+  field: string | null
+  startYear: string | null
+  endYear: string | null
+}
+
+/**
+ * Extract education from user message
+ * Looks for patterns like "BS Computer Science from MIT" or "Masters, Stanford, 2020"
+ */
+function extractEducation(message: string): EducationSchema[] | null {
+  // Don't extract from very short messages
+  if (message.length < 5) return null
+  if (/^(yes|no|ok|sure|thanks|next|skip|none|no degree)$/i.test(message.trim())) return null
+
+  // Look for "from" pattern: "Degree in Field from School"
+  const fromMatch = message.match(/(.+?)\s+(?:from|at)\s+(.+?)(?:\s+in\s+(\d{4}))?(?:\.|,|$)/i)
+  if (fromMatch) {
+    const degreeField = fromMatch[1].trim()
+    const inMatch = degreeField.match(/(.+?)\s+in\s+(.+)/i)
+    return [{
+      school: fromMatch[2].trim(),
+      degree: inMatch ? inMatch[1].trim() : degreeField,
+      field: inMatch ? inMatch[2].trim() : null,
+      startYear: null,
+      endYear: fromMatch[3] || null,
+    }]
+  }
+
+  // Look for comma-separated: "Degree, School"
+  const commaMatch = message.match(/^([^,]+),\s*([^,]+)(?:,\s*(.+))?$/i)
+  if (commaMatch) {
+    return [{
+      school: commaMatch[2].trim(),
+      degree: commaMatch[1].trim(),
+      field: commaMatch[3] ? commaMatch[3].trim() : null,
+      startYear: null,
+      endYear: null,
+    }]
+  }
+
+  // If nothing matched but message is substantial, treat as school name
+  if (message.trim().length >= 3) {
+    return [{
+      school: message.trim(),
+      degree: null,
+      field: null,
+      startYear: null,
+      endYear: null,
+    }]
+  }
+
+  return null
+}
+
+/**
+ * Apply all extractors to update collected data from user message
+ */
+function updateCollectedData(
+  currentData: Partial<CollectedData>,
+  userMessage: string
+): Partial<CollectedData> {
+  const updated = { ...currentData }
+
+  // Only extract if not already set
+  if (!updated.teamMode) {
+    const teamMode = extractTeamMode(userMessage)
+    if (teamMode) updated.teamMode = teamMode
+  }
+
+  if (!updated.profilePath) {
+    const profilePath = extractProfilePath(userMessage)
+    if (profilePath) updated.profilePath = profilePath
+  }
+
+  if (updated.hourlyMin === null || updated.hourlyMin === undefined) {
+    const rate = extractHourlyRate(userMessage)
+    if (rate.hourlyMin !== null) {
+      updated.hourlyMin = rate.hourlyMin
+      updated.hourlyMax = rate.hourlyMax
+      updated.currency = rate.currency
+    }
+  }
+
+  if (!updated.engagementTypes?.length) {
+    const engagement = extractEngagementType(userMessage)
+    if (engagement) updated.engagementTypes = engagement
+  }
+
+  if (updated.remoteOnly === null || updated.remoteOnly === undefined) {
+    const remote = extractRemotePreference(userMessage)
+    if (remote !== null) updated.remoteOnly = remote
+  }
+
+  if (!updated.experienceLevel) {
+    const level = extractExperienceLevel(userMessage)
+    if (level) updated.experienceLevel = level
+  }
+
+  // Only extract skills if we're in manual path and don't have skills yet
+  if (updated.profilePath === "manual" && !updated.skills?.length) {
+    const skills = extractSkills(userMessage)
+    if (skills) updated.skills = skills
+  }
+
+  // Extract experiences if manual path and don't have experiences yet
+  if (updated.profilePath === "manual" && !updated.experiences?.length) {
+    const experiences = extractExperience(userMessage)
+    if (experiences) updated.experiences = experiences
+  }
+
+  // Extract education if manual path and don't have educations yet
+  if (updated.profilePath === "manual" && !updated.educations?.length) {
+    const educations = extractEducation(userMessage)
+    if (educations) updated.educations = educations
+  }
+
+  return updated
+}
+
+// ============================================================================
 // Agent Instructions
 // ============================================================================
 
 const CONVERSATIONAL_AGENT_INSTRUCTIONS = `You are a friendly, casual onboarding assistant for HireMePlz, a platform that helps freelancers find work.
 
 ## Your Personality
-- Warm, approachable, and conversational - like chatting with a helpful friend
-- Concise but not robotic - use natural language
-- No emojis, but vary your word choices (don't always say "Got it" or "Perfect")
-- If someone makes a joke or sarcastic comment, play along briefly before continuing
+- Warm, approachable, and conversational
+- Concise but not robotic
+- No emojis
 - Never be annoying or repetitive
 
-## STRICT Conversation Flow
-Follow this EXACT order. Do NOT skip steps or combine questions:
+## CRITICAL RULES
+1. **ONE question per message** - never ask multiple questions
+2. **Check the "ALREADY COLLECTED" section** - NEVER ask about those items
+3. **Ask about the FIRST item in "STILL NEEDED"** - that's your only job
 
-### Step 1: GREETING (First message only)
-If this is the very first message (no conversation history), greet the user warmly as if meeting them for the first time. Something like: "Hey there! Welcome to HireMePlz. I'm here to help you set up your freelancer profile. Let's get started - are you working solo, or do you have a team?"
+## LinkedIn Flow (profilePath: linkedin)
+When LinkedIn data is fetched:
+- Skills, experience, and education come FROM LinkedIn - DO NOT ask about them
+- ONLY ask about: hourlyRate → engagementTypes → remoteOnly
+- Summarize their profile briefly, then immediately ask about hourly rate
 
-### Step 2: SOLO OR TEAM
-First real question: Are they working solo or with a team?
-- Wait for their answer before moving on
-- Valid answers: solo, team, just me, with others, etc.
-
-### Step 3: PROFILE SETUP METHOD
-After they answer solo/team, ask: "How would you like to set up your profile?"
-- Import from LinkedIn
-- Share a portfolio link
-- Tell me about yourself manually
-- Do NOT list Upwork as an option
-
-### Step 4A: If LinkedIn - After scraping completes
-Review the scraped data. If ANY of these are missing or unclear, ASK about them:
-- Experience level (if not clear from job titles)
-- Primary skills (if skill list is empty or too vague)
-- Hourly rate range
-- Full-time vs part-time preference
-- Remote preference
-
-### Step 4B: If Portfolio/Manual
-Ask about: experience level → skills → past work highlights → rate range → engagement type → remote preference
-
-## BE SMART - Infer Information
-- "$45-100" → USD (dollar sign!)
-- "€50-80" → EUR
-- "£40-60" → GBP
-- Don't re-ask if info is already given
-
-## Important Rules
-- ONE question at a time
-- Keep responses short (1-3 sentences max)
-- If they give gibberish twice, skip and move on
-- Sound human, not like a form`
-
-const DATA_EXTRACTION_INSTRUCTIONS = `You are a data extraction agent. Extract structured data from the conversation.
-
-## Smart Extraction Rules
-- ALWAYS preserve all previously collected data - never lose existing info
-- BE SMART about inferring data:
-  - "$45-100" or "$45-$100" → hourlyMin: 45, hourlyMax: 100, currency: "USD"
-  - "€50-80" → hourlyMin: 50, hourlyMax: 80, currency: "EUR"
-  - "£40-60" → hourlyMin: 40, hourlyMax: 60, currency: "GBP"
-  - "45-100/hr" with no symbol → extract numbers, leave currency null unless context helps
-- Extract data when the assistant acknowledges/moves forward with the information
-- Don't extract from gibberish/random characters the user typed
-
-## What to Extract
-- teamMode: "solo" or "team" when user indicates working alone or with a team
-- profilePath: when user chooses linkedin/portfolio/manual (NOT upwork)
-- URLs: when user provides linkedin/portfolio links
-- hourlyMin/hourlyMax: numbers from rate ranges
-- currency: INFER from symbols ($=USD, €=EUR, £=GBP) or explicit mention
-- experienceLevel: entry, mid, senior, lead, director, intern_new_grad
-- skills, experiences, educations: when user mentions them
-- engagementTypes: full_time, part_time, internship
-- remoteOnly: true/false based on remote preference
-
-## LinkedIn Import Data
-When LinkedIn profile data is available from the scraping tool results in the conversation:
-- Extract skills, experiences, educations directly from the scraped profile data
-- Set profilePath to "linkedin"
-- Set linkedinUrl to the provided URL
-- Set experienceLevel from the profile's inferred experience level
-- Map the profile's skills array to the skills field
-- Map the profile's experiences array to the experiences field (title, company, startDate, endDate, highlights)
-- Map the profile's educations array to the educations field (school, degree, field, startYear, endYear)
-
-## Completion Criteria
-Set isComplete to true ONLY when ALL of these are collected:
-1. teamMode (solo/team) - REQUIRED
-2. profilePath chosen (linkedin/portfolio/manual) - REQUIRED
-3. experienceLevel - REQUIRED
-4. skills array with at least 1 skill - REQUIRED
-5. hourlyMin OR hourlyMax set - REQUIRED
-6. engagementTypes set - REQUIRED
-7. remoteOnly set (true or false) - REQUIRED
-
-If ANY of these are missing, isComplete MUST be false.`
-
-const PROFILE_ANALYSIS_INSTRUCTIONS = `You are a professional career advisor and profile analyst. Analyze the user's freelancer profile and provide comprehensive feedback.
-
-## Your Task
-Analyze the collected profile data and provide:
-1. A profile score (0-100) based on completeness and quality
-2. A brief 3-5 word summary of the profile
-3. A detailed analysis with actionable insights
-
-## Scoring Criteria (100 points total)
-- Profile completeness (30 points): All fields filled, detailed information
-- Experience quality (25 points): Relevant experience, clear progression, notable companies
-- Skills relevance (20 points): In-demand skills, variety, depth
-- Rate competitiveness (15 points): Market-aligned rates for their level
-- Professional presentation (10 points): Clear, well-organized information
+## Manual Flow (profilePath: manual)
+Ask in this EXACT order (one at a time):
+1. experienceLevel - "What's your experience level?" (entry/mid/senior/lead/director)
+2. skills - "What are your main skills?" (ask for specific technologies, frameworks, languages)
+3. experiences - "Tell me about your most recent job - what was your title and company?"
+4. education - "What's your highest education? School and degree/field?"
+5. hourlyRate - "What's your typical hourly rate range?"
+6. engagementTypes - "Are you looking for full-time, part-time, or both?"
+7. remoteOnly - "Do you prefer remote-only work, or are you open to on-site?"
 
 ## Response Format
-Your response MUST be valid JSON with this exact structure:
+- 1-2 sentences acknowledging their input
+- Then ask the ONE question for the first missing item
+- Sound human, not like a form`
+
+const PROFILE_ANALYSIS_INSTRUCTIONS = `You are a professional career advisor. Analyze the user's freelancer profile and provide comprehensive feedback.
+
+## Response Format
+Return valid JSON with this exact structure:
 {
   "score": <number 0-100>,
   "title": "Profile Analysis",
-  "summary": "<3-5 word summary like 'Strong Senior Developer Profile' or 'Promising Entry-Level Designer'>",
-  "analysis": "<Full markdown analysis - see format below>"
+  "summary": "<3-5 word summary like 'Strong Senior Developer Profile'>",
+  "analysis": "<Full markdown analysis with proper ### headings>"
 }
 
-## Analysis Markdown Format
-The "analysis" field should contain markdown with these sections:
+## Analysis Markdown Format - USE EXACT SYNTAX
+The "analysis" field MUST use proper markdown heading syntax with ### prefix:
 
+\`\`\`markdown
 ### Overview
 Brief 2-3 sentence overview of the profile.
 
 ### Strengths
-- Bullet points of what's strong about this profile
-- Be specific and encouraging
+- First strength point
+- Second strength point
+- Third strength point
 
 ### Areas for Improvement
-- Bullet points of what could be better
-- Actionable suggestions
+- First improvement area
+- Second improvement area
 
 ### Market Insights
-- How this profile compares to market standards
-- Rate recommendations based on experience level
-- In-demand skills they have or should consider
+- Rate recommendations based on experience
+- In-demand skills to consider
 
 ### Next Steps
-Numbered list of 3-5 specific actions to improve their profile.
+1. First action item
+2. Second action item
+3. Third action item
+\`\`\`
 
-Be encouraging but honest. Provide real value.`
+IMPORTANT: You MUST include the "### " prefix (hash-hash-hash-space) before each heading. Without it, headings won't render correctly.
+
+Be encouraging but honest.`
 
 // ============================================================================
 // LinkedIn Scraping Helpers
 // ============================================================================
 
 const POLL_INTERVAL_MS = 5_000
-const MAX_TOTAL_POLLS = 60 // 5 minutes max
+const MAX_TOTAL_POLLS = 60
 
 const LINKEDIN_URL_RE = /https?:\/\/(?:www\.)?linkedin\.com\/in\/[\w-]+\/?/i
 
-/**
- * Extract a LinkedIn profile URL from the user message, or return null.
- */
 function extractLinkedInUrl(message: string): string | null {
   const match = message.match(LINKEDIN_URL_RE)
   return match ? match[0] : null
@@ -489,7 +637,6 @@ export async function POST(request: NextRequest) {
 
     const { message, conversationHistory, collectedData, stream } = parsed.data
 
-    // Verify API key is configured
     const apiKey =
       readEnvLocalValue("OPENAI_API_KEY") ?? process.env.OPENAI_API_KEY
     if (!apiKey) {
@@ -507,18 +654,86 @@ export async function POST(request: NextRequest) {
 
     process.env.OPENAI_API_KEY = apiKey
 
-    // Build conversation context
-    const conversationContext = conversationHistory.map((m) => `${m.role}: ${m.content}`).join("\n")
+    const conversationContext = conversationHistory
+      .map((m) => `${m.role}: ${m.content}`)
+      .join("\n")
 
-    const conversationalPrompt = `
-Conversation so far:
+    // Helper to show what's collected vs missing
+    const getDataStatus = (data: Partial<CollectedData>) => {
+      const filled: string[] = []
+      const missing: string[] = []
+      const isLinkedIn = data.profilePath === "linkedin"
+      const isManual = data.profilePath === "manual"
+
+      if (data.teamMode) filled.push(`teamMode: ${data.teamMode}`)
+      else missing.push("teamMode")
+
+      if (data.profilePath) filled.push(`profilePath: ${data.profilePath}`)
+      else missing.push("profilePath")
+
+      // For LinkedIn: these come from profile, don't ask
+      if (isLinkedIn) {
+        if (data.experienceLevel) filled.push(`experienceLevel: ${data.experienceLevel} (from LinkedIn)`)
+        else filled.push("experienceLevel: inferred from LinkedIn")
+
+        if (data.skills?.length) filled.push(`skills: ${data.skills.map(s => s.name).join(", ")} (from LinkedIn)`)
+        else filled.push("skills: from LinkedIn profile")
+
+        if (data.experiences?.length) filled.push(`experiences: ${data.experiences.length} positions (from LinkedIn)`)
+        else filled.push("experiences: from LinkedIn profile")
+
+        if (data.educations?.length) filled.push(`educations: ${data.educations.length} entries (from LinkedIn)`)
+        else filled.push("educations: from LinkedIn profile")
+      } else if (isManual) {
+        // Manual path: need to ask all of these
+        if (data.experienceLevel) filled.push(`experienceLevel: ${data.experienceLevel}`)
+        else missing.push("experienceLevel")
+
+        if (data.skills?.length) filled.push(`skills: ${data.skills.map(s => s.name).join(", ")}`)
+        else missing.push("skills (ask for specific technical skills, frameworks, languages)")
+
+        if (data.experiences?.length) filled.push(`experiences: ${data.experiences.map(e => `${e.title} at ${e.company}`).join("; ")}`)
+        else missing.push("experiences (ask for recent job: title, company name, duration)")
+
+        if (data.educations?.length) filled.push(`educations: ${data.educations.map(e => `${e.degree} from ${e.school}`).join("; ")}`)
+        else missing.push("education (ask for highest degree, school name, field of study)")
+      }
+
+      // These ALWAYS need to be asked (LinkedIn doesn't have them)
+      if (data.hourlyMin !== null && data.hourlyMin !== undefined)
+        filled.push(`hourlyRate: $${data.hourlyMin}${data.hourlyMax ? `-${data.hourlyMax}` : "+"}`)
+      else missing.push("hourlyRate")
+
+      if (data.engagementTypes?.length) filled.push(`engagementTypes: ${data.engagementTypes.join(", ")}`)
+      else missing.push("engagementTypes (full-time, part-time, or both)")
+
+      if (data.remoteOnly !== null && data.remoteOnly !== undefined)
+        filled.push(`remoteOnly: ${data.remoteOnly}`)
+      else missing.push("remoteOnly (remote only or open to on-site)")
+
+      return { filled, missing }
+    }
+
+    // Create prompt dynamically with current data state
+    const createPrompt = (currentData: Partial<CollectedData>, extraContext?: string) => {
+      const { filled, missing } = getDataStatus(currentData)
+      return `
+## ALREADY COLLECTED (DO NOT ask about these again):
+${filled.length > 0 ? filled.join("\n") : "Nothing yet"}
+
+## STILL NEEDED (ask about the FIRST one only):
+${missing.length > 0 ? missing.join(", ") : "ALL DONE - profile is complete!"}
+
+## Conversation so far:
 ${conversationContext}
 
-User's new message: ${message}
+## User's new message:
+${message}
+${extraContext ? `\n## Additional context:\n${extraContext}` : ""}
 
-Respond naturally to continue the onboarding conversation. Remember to validate the user's response - if it's incomplete or unclear, ask for clarification.`
+Respond naturally. Ask about the FIRST missing item only. NEVER re-ask about already collected data.`
+    }
 
-    // Handle streaming response
     if (stream) {
       const encoder = new TextEncoder()
 
@@ -530,10 +745,9 @@ Respond naturally to continue the onboarding conversation. Remember to validate 
             )
           }
 
-          /** Helper to stream an agent run and accumulate text */
           async function streamAgent(
             agent: Agent,
-            prompt: string,
+            prompt: string
           ): Promise<string> {
             let text = ""
             const result = await run(agent, prompt, { stream: true })
@@ -551,6 +765,12 @@ Respond naturally to continue the onboarding conversation. Remember to validate 
           const linkedInUrl = extractLinkedInUrl(message)
           let fullConversationalResponse = ""
 
+          // Start with current data and update with user's message
+          let updatedData: Partial<CollectedData> = updateCollectedData(
+            { ...collectedData },
+            message
+          )
+
           try {
             if (linkedInUrl) {
               // ── Phase 1: Stream filler text ──────────────────────────
@@ -558,15 +778,15 @@ Respond naturally to continue the onboarding conversation. Remember to validate 
                 name: "Conversational Assistant",
                 instructions:
                   CONVERSATIONAL_AGENT_INSTRUCTIONS +
-                  `\n\nIMPORTANT: The user just provided their LinkedIn profile URL. Acknowledge it briefly and let them know you're fetching their profile data now. Keep your response to 1-2 short sentences. Do NOT list any profile details yet — you don't have them.`,
+                  `\n\nIMPORTANT: The user just provided their LinkedIn profile URL. Acknowledge it briefly and let them know you're fetching their profile data now. Keep your response to 1-2 short sentences.`,
                 model: "gpt-4.1-nano",
               })
               fullConversationalResponse += await streamAgent(
                 fillerAgent,
-                conversationalPrompt,
+                createPrompt(updatedData)
               )
 
-              // ── Phase 2: Trigger scrape + poll with heartbeats ──────
+              // ── Phase 2: Trigger scrape + poll ──────────────────────
               sseEmit({
                 type: "tool_call",
                 name: "linkedin_scrape",
@@ -582,7 +802,10 @@ Respond naturally to continue the onboarding conversation. Remember to validate 
               for (let i = 0; i < MAX_TOTAL_POLLS; i++) {
                 const status = await getScrapeStatusUtil(runId)
 
-                if (status.status === "completed" || status.status === "failed") {
+                if (
+                  status.status === "completed" ||
+                  status.status === "failed"
+                ) {
                   scrapeResult = status
                   break
                 }
@@ -598,7 +821,7 @@ Respond naturally to continue the onboarding conversation. Remember to validate 
                 }
               }
 
-              // ── Phase 3: Stream results or error ────────────────────
+              // ── Phase 3: Handle results ────────────────────────────
               if (scrapeResult.status === "completed") {
                 sseEmit({
                   type: "tool_call",
@@ -606,11 +829,38 @@ Respond naturally to continue the onboarding conversation. Remember to validate 
                   status: "completed",
                 })
 
-                const profileJson = JSON.stringify(
-                  scrapeResult.profile,
-                  null,
-                  2,
-                )
+                const profile = scrapeResult.profile
+
+                // DIRECTLY populate data from LinkedIn (no AI needed!)
+                updatedData = {
+                  ...updatedData,
+                  profilePath: "linkedin",
+                  linkedinUrl: profile.linkedinUrl || linkedInUrl,
+                  experienceLevel: profile.experienceLevel || updatedData.experienceLevel,
+                  skills: profile.skills?.length
+                    ? profile.skills.map((s) => ({ name: s.name }))
+                    : updatedData.skills,
+                  experiences: profile.experiences?.length
+                    ? profile.experiences.map((e) => ({
+                        title: e.title,
+                        company: e.company,
+                        startDate: e.startDate,
+                        endDate: e.endDate,
+                        highlights: e.highlights,
+                      }))
+                    : updatedData.experiences,
+                  educations: profile.educations?.length
+                    ? profile.educations.map((e) => ({
+                        school: e.school,
+                        degree: e.degree,
+                        field: e.field,
+                        startYear: e.startYear,
+                        endYear: e.endYear,
+                      }))
+                    : updatedData.educations,
+                }
+
+                const profileJson = JSON.stringify(profile, null, 2)
 
                 const summaryAgent = new Agent({
                   name: "Conversational Assistant",
@@ -618,19 +868,17 @@ Respond naturally to continue the onboarding conversation. Remember to validate 
                   model: "gpt-4.1-nano",
                 })
 
-                const summaryPrompt = `${conversationalPrompt}
-
-You already acknowledged the LinkedIn URL and told the user you're fetching their profile. The scrape is now complete. Here is their scraped LinkedIn profile data:
-
-${profileJson}
-
-Summarize the key highlights (name, headline, number of experiences, top skills) and continue the onboarding — since you have their profile data, skip questions about experience level, skills, and past work, and move directly to preferences (rates, engagement type, remote preference).`
+                // Use createPrompt with UPDATED data after LinkedIn extraction
+                const summaryPrompt = createPrompt(
+                  updatedData,
+                  `LinkedIn profile fetched successfully:\n${profileJson}\n\nIMPORTANT: LinkedIn provides skills and experience - DO NOT ask about those. Summarize their profile in 1-2 sentences (name, headline, notable skills/experience), then ask: "What's your typical hourly rate range?"`
+                )
 
                 fullConversationalResponse += "\n\n"
                 sseEmit({ type: "text", content: "\n\n" })
                 fullConversationalResponse += await streamAgent(
                   summaryAgent,
-                  summaryPrompt,
+                  summaryPrompt
                 )
               } else {
                 sseEmit({
@@ -645,15 +893,16 @@ Summarize the key highlights (name, headline, number of experiences, top skills)
                   model: "gpt-4.1-nano",
                 })
 
-                const errorPrompt = `${conversationalPrompt}
-
-You already told the user you'd fetch their LinkedIn profile, but the scrape failed with error: "${scrapeResult.error}". Apologize briefly and ask them to try again or set up their profile manually instead.`
+                const errorPrompt = createPrompt(
+                  updatedData,
+                  `LinkedIn scrape failed: "${scrapeResult.error}". Apologize briefly and ask them to try again or set up manually.`
+                )
 
                 fullConversationalResponse += "\n\n"
                 sseEmit({ type: "text", content: "\n\n" })
                 fullConversationalResponse += await streamAgent(
                   errorAgent,
-                  errorPrompt,
+                  errorPrompt
                 )
               }
             } else {
@@ -665,94 +914,88 @@ You already told the user you'd fetch their LinkedIn profile, but the scrape fai
               })
               fullConversationalResponse += await streamAgent(
                 conversationalAgent,
-                conversationalPrompt,
+                createPrompt(updatedData)
               )
             }
 
-            // ── Data extraction (runs for all paths) ────────────────
-            const fullConversation = `${conversationContext}
-user: ${message}
-assistant: ${fullConversationalResponse}`
+            // ── Check if profile is complete ────────────────────────
+            const isComplete = isProfileComplete(updatedData)
 
-            const dataExtractionPrompt = `
-Current collected data (preserve all of this):
-${JSON.stringify(collectedData, null, 2)}
-
-Full conversation with the assistant's response:
-${fullConversation}
-
-Extract ONLY data that the assistant has clearly confirmed/acknowledged. If the assistant asked for clarification, do NOT extract from the user's unclear response.`
-
-            const dataExtractionAgent = new Agent({
-              name: "Data Extraction Agent",
-              instructions: DATA_EXTRACTION_INSTRUCTIONS,
-              model: "gpt-4.1-nano",
-              outputType: DataExtractionJsonSchema,
+            // Emit final data
+            sseEmit({
+              type: "final",
+              collectedData: updatedData,
+              isComplete,
             })
 
-            const dataResult = await run(
-              dataExtractionAgent,
-              dataExtractionPrompt,
-            )
+            // ── Profile Analysis (when complete) ────────────────────
+            if (isComplete) {
+              sseEmit({ type: "analysis_started" })
 
-            if (dataResult.finalOutput) {
-              const extracted = DataExtractionResponseSchema.parse(
-                dataResult.finalOutput,
-              ) as DataExtractionResponse
-
-              sseEmit({
-                type: "final",
-                collectedData: extracted.collectedData,
-                isComplete: extracted.isComplete,
-              })
-
-              // ── Profile Analysis (when onboarding is complete) ────────
-              if (extracted.isComplete) {
-                sseEmit({ type: "analysis_started" })
-
-                const profileAnalysisPrompt = `
+              const profileAnalysisPrompt = `
 Analyze this freelancer profile and provide comprehensive feedback:
 
 Profile Data:
-${JSON.stringify(extracted.collectedData, null, 2)}
+${JSON.stringify(updatedData, null, 2)}
 
-Provide a score (0-100), brief summary, and detailed markdown analysis following the format in your instructions.`
+Provide a score (0-100), brief summary, and detailed markdown analysis.`
 
-                const profileAnalysisAgent = new Agent({
-                  name: "Profile Analyst",
-                  instructions: PROFILE_ANALYSIS_INSTRUCTIONS,
-                  model: "gpt-5-mini-2025-08-07",
-                  outputType: ProfileAnalysisJsonSchema,
+              const profileAnalysisAgent = new Agent({
+                name: "Profile Analyst",
+                instructions: PROFILE_ANALYSIS_INSTRUCTIONS,
+                model: "gpt-4.1-mini",
+                outputType: ProfileAnalysisJsonSchema,
+              })
+
+              try {
+                const reasoningStartTime = Date.now()
+                sseEmit({ type: "reasoning_started" })
+
+                const analysisResult = await run(
+                  profileAnalysisAgent,
+                  profileAnalysisPrompt,
+                  { stream: true }
+                )
+
+                const textStream = analysisResult.toTextStream({
+                  compatibleWithNodeStreams: false,
                 })
 
-                try {
-                  const analysisResult = await run(
-                    profileAnalysisAgent,
-                    profileAnalysisPrompt,
-                    { reasoningEffort: "high" }
-                  )
-
-                  if (analysisResult.finalOutput) {
-                    const analysis = ProfileAnalysisResponseSchema.parse(
-                      analysisResult.finalOutput,
-                    ) as ProfileAnalysisResponse
-
-                    sseEmit({
-                      type: "profile_analysis",
-                      score: analysis.score,
-                      title: analysis.title,
-                      summary: analysis.summary,
-                      analysis: analysis.analysis,
-                    })
+                for await (const chunk of textStream) {
+                  if (chunk) {
+                    sseEmit({ type: "reasoning_chunk", content: chunk })
                   }
-                } catch (analysisError) {
-                  console.error("Profile analysis error:", analysisError)
-                  // Don't fail the whole request if analysis fails
+                }
+
+                await analysisResult.completed
+
+                const reasoningDuration = Math.round(
+                  (Date.now() - reasoningStartTime) / 1000
+                )
+                sseEmit({
+                  type: "reasoning_completed",
+                  duration: reasoningDuration,
+                })
+
+                if (analysisResult.finalOutput) {
+                  const analysis = ProfileAnalysisResponseSchema.parse(
+                    analysisResult.finalOutput
+                  ) as ProfileAnalysisResponse
+
                   sseEmit({
-                    type: "analysis_error",
-                    message: "Could not generate profile analysis",
+                    type: "profile_analysis",
+                    score: analysis.score,
+                    title: analysis.title,
+                    summary: analysis.summary,
+                    analysis: analysis.analysis,
                   })
                 }
+              } catch (analysisError) {
+                console.error("Profile analysis error:", analysisError)
+                sseEmit({
+                  type: "analysis_error",
+                  message: "Could not generate profile analysis",
+                })
               }
             }
 
@@ -763,9 +1006,7 @@ Provide a score (0-100), brief summary, and detailed markdown analysis following
             sseEmit({
               type: "error",
               message:
-                error instanceof Error
-                  ? error.message
-                  : "Streaming failed",
+                error instanceof Error ? error.message : "Streaming failed",
             })
             controller.close()
           }
@@ -781,27 +1022,20 @@ Provide a score (0-100), brief summary, and detailed markdown analysis following
       })
     }
 
-    // Non-streaming response: run conversational agent first, then extraction
+    // Non-streaming response (simplified)
     let messageText = ""
     const linkedInUrl = extractLinkedInUrl(message)
+    let updatedData: Partial<CollectedData> = updateCollectedData(
+      { ...collectedData },
+      message
+    )
 
     if (linkedInUrl) {
-      // Phase 1: filler
-      const fillerAgent = new Agent({
-        name: "Conversational Assistant",
-        instructions:
-          CONVERSATIONAL_AGENT_INSTRUCTIONS +
-          `\n\nIMPORTANT: The user just provided their LinkedIn profile URL. Acknowledge it briefly and let them know you're fetching their profile data now. Keep your response to 1-2 short sentences.`,
-        model: "gpt-4.1-nano",
-      })
-      const fillerResult = await run(fillerAgent, conversationalPrompt)
-      messageText += typeof fillerResult.finalOutput === "string"
-        ? fillerResult.finalOutput
-        : String(fillerResult.finalOutput ?? "")
+      messageText = "Thanks for sharing your LinkedIn profile! Let me fetch your details..."
 
-      // Phase 2: scrape
       const { runId } = await triggerScrapeUtil(linkedInUrl)
-      let scrapeResult: Awaited<ReturnType<typeof getScrapeStatusUtil>> | null = null
+      let scrapeResult: Awaited<ReturnType<typeof getScrapeStatusUtil>> | null =
+        null
       for (let i = 0; i < MAX_TOTAL_POLLS; i++) {
         const status = await getScrapeStatusUtil(runId)
         if (status.status === "completed" || status.status === "failed") {
@@ -810,27 +1044,33 @@ Provide a score (0-100), brief summary, and detailed markdown analysis following
         }
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
       }
-      if (!scrapeResult) {
-        scrapeResult = { status: "failed" as const, error: "Scraping timed out" }
-      }
 
-      // Phase 3: summary or error
-      if (scrapeResult.status === "completed") {
-        const profileJson = JSON.stringify(scrapeResult.profile, null, 2)
-        const summaryAgent = new Agent({
-          name: "Conversational Assistant",
-          instructions: CONVERSATIONAL_AGENT_INSTRUCTIONS,
-          model: "gpt-4.1-nano",
-        })
-        const summaryResult = await run(
-          summaryAgent,
-          `${conversationalPrompt}\n\nLinkedIn profile data:\n${profileJson}\n\nSummarize key highlights and move to preferences.`,
-        )
-        messageText += "\n\n" + (typeof summaryResult.finalOutput === "string"
-          ? summaryResult.finalOutput
-          : String(summaryResult.finalOutput ?? ""))
+      if (scrapeResult?.status === "completed") {
+        const profile = scrapeResult.profile
+        updatedData = {
+          ...updatedData,
+          profilePath: "linkedin",
+          linkedinUrl: profile.linkedinUrl || linkedInUrl,
+          experienceLevel: profile.experienceLevel,
+          skills: profile.skills?.map((s) => ({ name: s.name })),
+          experiences: profile.experiences?.map((e) => ({
+            title: e.title,
+            company: e.company,
+            startDate: e.startDate,
+            endDate: e.endDate,
+            highlights: e.highlights,
+          })),
+          educations: profile.educations?.map((e) => ({
+            school: e.school,
+            degree: e.degree,
+            field: e.field,
+            startYear: e.startYear,
+            endYear: e.endYear,
+          })),
+        }
+        messageText += `\n\nI found your profile! What's your typical hourly rate range?`
       } else {
-        messageText += `\n\nSorry, I couldn't fetch your LinkedIn profile (${scrapeResult.error}). Would you like to try again or set up your profile manually?`
+        messageText += `\n\nSorry, I couldn't fetch your profile. Would you like to try again or set up manually?`
       }
     } else {
       const conversationalAgent = new Agent({
@@ -838,47 +1078,18 @@ Provide a score (0-100), brief summary, and detailed markdown analysis following
         instructions: CONVERSATIONAL_AGENT_INSTRUCTIONS,
         model: "gpt-4.1-nano",
       })
-      const conversationalResult = await run(conversationalAgent, conversationalPrompt)
-      messageText = typeof conversationalResult.finalOutput === "string"
-        ? conversationalResult.finalOutput
-        : String(conversationalResult.finalOutput ?? "")
+      const result = await run(conversationalAgent, createPrompt(updatedData))
+      messageText =
+        typeof result.finalOutput === "string"
+          ? result.finalOutput
+          : String(result.finalOutput ?? "")
     }
 
-    // Build full conversation with the assistant's response
-    const fullConversation = `${conversationContext}
-user: ${message}
-assistant: ${messageText}`
-
-    const dataExtractionPrompt = `
-Current collected data (preserve all of this):
-${JSON.stringify(collectedData, null, 2)}
-
-Full conversation with the assistant's response:
-${fullConversation}
-
-Extract ONLY data that the assistant has clearly confirmed/acknowledged. If the assistant asked for clarification, do NOT extract from the user's unclear response.`
-
-    const dataExtractionAgent = new Agent({
-      name: "Data Extraction Agent",
-      instructions: DATA_EXTRACTION_INSTRUCTIONS,
-      model: "gpt-4.1-nano",
-      outputType: DataExtractionJsonSchema,
-    })
-
-    const dataResult = await run(dataExtractionAgent, dataExtractionPrompt)
-
-    let extractedData = collectedData
-    let isComplete = false
-
-    if (dataResult.finalOutput) {
-      const extracted = DataExtractionResponseSchema.parse(dataResult.finalOutput) as DataExtractionResponse
-      extractedData = extracted.collectedData
-      isComplete = extracted.isComplete
-    }
+    const isComplete = isProfileComplete(updatedData)
 
     return Response.json({
       message: messageText,
-      collectedData: extractedData,
+      collectedData: updatedData,
       isComplete,
     })
   } catch (error) {

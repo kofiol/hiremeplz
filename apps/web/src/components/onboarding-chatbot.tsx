@@ -41,8 +41,11 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Reasoning } from "@/components/ui/reasoning"
 import { ProfileScoreCard } from "@/components/ui/score-indicator"
-import { Check, CheckCircle, Linkedin, LoaderIcon, OctagonX, Pencil, Sparkles, Square, X, XCircle } from "lucide-react"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import { Check, CheckCircle, Linkedin, LoaderIcon, OctagonX, Pencil, Square, X, XCircle } from "lucide-react"
 
 // ============================================================================
 // Types
@@ -61,12 +64,18 @@ type ProfileAnalysis = {
   analysis: string
 }
 
+type ReasoningInfo = {
+  content: string
+  duration?: number
+}
+
 type ChatMessage = {
   id: string
   role: "user" | "assistant"
   content: string
   toolCall?: ToolCallInfo
   profileAnalysis?: ProfileAnalysis
+  reasoning?: ReasoningInfo
 }
 
 type CollectedData = {
@@ -147,22 +156,29 @@ function getSuggestedReplies(data: CollectedData): string[] {
   if (data.teamMode === null) {
     return ["Solo", "Team"]
   }
-  // Step 2: Profile setup method
+  // Step 2: Profile setup method (only LinkedIn or Manual)
   if (data.profilePath === null) {
-    return ["Import from LinkedIn", "Share a portfolio link", "Tell you manually"]
+    return ["Import from LinkedIn", "Tell you manually"]
   }
-  // Step 3 (manual path): Experience level
-  if (
-    data.profilePath === "manual" &&
-    data.experienceLevel === null
-  ) {
-    return ["Entry level", "Mid level", "Senior", "Lead"]
+
+  // For LinkedIn: skip experience level and skills (they come from LinkedIn)
+  // For Manual: ask about experience and skills
+  if (data.profilePath === "manual") {
+    if (data.experienceLevel === null) {
+      return ["Entry level", "Mid level", "Senior", "Lead"]
+    }
+    if (!data.skills || data.skills.length === 0) {
+      return [] // Empty - user should type their skills
+    }
   }
-  // Step 4: Engagement type
+
+  // Both paths: ask about preferences
+  if (data.hourlyMin === null && data.hourlyMax === null) {
+    return ["$30-50", "$50-100", "$100-150", "$150+"]
+  }
   if (data.engagementTypes === null) {
     return ["Full-time", "Part-time", "Both"]
   }
-  // Step 5: Remote preference
   if (data.remoteOnly === null) {
     return ["Remote only", "Open to on-site", "Either works"]
   }
@@ -267,6 +283,11 @@ export function OnboardingChatbot() {
     status: string
     elapsed?: number
   } | null>(null)
+
+  // Reasoning state
+  const [reasoningContent, setReasoningContent] = useState("")
+  const [reasoningDuration, setReasoningDuration] = useState<number | undefined>()
+  const [isReasoning, setIsReasoning] = useState(false)
 
   // Quick reply suggestions
   const suggestedReplies = React.useMemo(
@@ -386,6 +407,8 @@ export function OnboardingChatbot() {
     let finalCollectedData = currentCollectedData
     let wasAborted = false
     let profileAnalysisResult: ProfileAnalysis | null = null
+    let reasoningText = ""
+    let reasoningDur: number | undefined
 
     setIsStreaming(true)
     setStreamingContent("")
@@ -476,6 +499,17 @@ export function OnboardingChatbot() {
               }
             } else if (parsed.type === "analysis_error") {
               setActiveToolCall(null)
+            } else if (parsed.type === "reasoning_started") {
+              setIsReasoning(true)
+              setReasoningContent("")
+              reasoningText = ""
+            } else if (parsed.type === "reasoning_chunk") {
+              reasoningText += parsed.content
+              setReasoningContent(reasoningText)
+            } else if (parsed.type === "reasoning_completed") {
+              setIsReasoning(false)
+              setReasoningDuration(parsed.duration)
+              reasoningDur = parsed.duration
             }
           } catch {
             // Ignore parse errors for incomplete chunks
@@ -493,6 +527,7 @@ export function OnboardingChatbot() {
       setIsStreaming(false)
       setStreamingContent("")
       setActiveToolCall(null)
+      setIsReasoning(false)
     }
 
     // If aborted during a tool call, mark it as aborted
@@ -546,8 +581,15 @@ export function OnboardingChatbot() {
         role: "assistant",
         content: profileAnalysisResult.analysis,
         profileAnalysis: profileAnalysisResult,
+        reasoning: reasoningText
+          ? { content: reasoningText, duration: reasoningDur }
+          : undefined,
       })
     }
+
+    // Reset reasoning state after processing
+    setReasoningContent("")
+    setReasoningDuration(undefined)
 
     const finalMessages = [...updatedMessages, ...newMessages]
     setMessages(finalMessages)
@@ -1090,6 +1132,27 @@ export function OnboardingChatbot() {
                               : ""}
                           </span>
                         </div>
+                      ) : message.profileAnalysis ? (
+                        <div className="space-y-4">
+                          {message.reasoning && (
+                            <Reasoning
+                              isStreaming={false}
+                              content={message.reasoning.content}
+                              duration={message.reasoning.duration}
+                            />
+                          )}
+                          <ProfileScoreCard
+                            score={message.profileAnalysis.score}
+                            title={message.profileAnalysis.title}
+                            summary={message.profileAnalysis.summary}
+                            className="max-w-md"
+                          />
+                          <div className="prose prose-sm prose-invert max-w-none">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {message.profileAnalysis.analysis}
+                            </ReactMarkdown>
+                          </div>
+                        </div>
                       ) : (
                         <div className="max-w-none whitespace-pre-wrap text-base text-white">
                           {message.content}
@@ -1118,13 +1181,28 @@ export function OnboardingChatbot() {
                       <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm text-muted-foreground">
                         <LoaderIcon className="size-3.5 animate-spin text-primary" />
                         <span>
-                          Fetching LinkedIn profile
+                          {activeToolCall.name === "profile_analysis"
+                            ? "Analyzing your profile"
+                            : "Fetching LinkedIn profile"}
                           {activeToolCall.elapsed
                             ? ` (${activeToolCall.elapsed}s)`
                             : ""}
                           ...
                         </span>
                       </div>
+                    </MessageContent>
+                  </Message>
+                )}
+
+                {/* Live reasoning display during profile analysis */}
+                {isReasoning && (
+                  <Message from="assistant" hideAvatar>
+                    <MessageContent>
+                      <Reasoning
+                        isStreaming={true}
+                        content={reasoningContent}
+                        duration={reasoningDuration}
+                      />
                     </MessageContent>
                   </Message>
                 )}

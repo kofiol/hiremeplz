@@ -25,7 +25,10 @@
       "Bash(npx shadcn@latest add:*)",
       "WebFetch(domain:codesandbox.io)",
       "WebFetch(domain:www.npmjs.com)",
-      "Bash(pnpm add:*)"
+      "Bash(pnpm add:*)",
+      "Bash(pnpm eslint:*)",
+      "Bash(pnpm exec tsc:*)",
+      "Bash(pnpm turbo run check-types:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

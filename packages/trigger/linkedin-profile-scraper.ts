@@ -345,14 +345,14 @@ async function triggerScrape(urls: string[], apiKey: string): Promise<string> {
   const input = urls.map((url) => ({ url }))
 
   const response = await fetch(
-    `${BRIGHTDATA_API_BASE}/scrape?dataset_id=${BRIGHTDATA_DATASET_ID}&notify=false&include_errors=true`,
+    `${BRIGHTDATA_API_BASE}/trigger?dataset_id=${BRIGHTDATA_DATASET_ID}&include_errors=true`,
     {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ input }),
+      body: JSON.stringify(input),
     }
   )
 
@@ -361,14 +361,64 @@ async function triggerScrape(urls: string[], apiKey: string): Promise<string> {
     throw new Error(`BrightData trigger failed: ${response.status} - ${errorText}`)
   }
 
-  const data = (await response.json()) as { snapshot_id: string }
-  return data.snapshot_id
+  const data = (await response.json()) as Record<string, unknown>
+  logger.info("BrightData trigger response", { data })
+
+  // Handle multiple possible response formats from BrightData
+  const snapshotId =
+    (data.snapshot_id as string) ||
+    (data.snapshotId as string) ||
+    (data.id as string) ||
+    (data.snapshot as string)
+
+  if (!snapshotId) {
+    throw new Error(`BrightData returned unexpected response format: ${JSON.stringify(data)}`)
+  }
+
+  return snapshotId
+}
+
+async function checkProgress(
+  snapshotId: string,
+  apiKey: string
+): Promise<{ status: "running" | "ready" | "failed"; error?: string }> {
+  const response = await fetch(`${BRIGHTDATA_API_BASE}/progress/${snapshotId}`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  })
+
+  if (!response.ok) {
+    // If progress endpoint fails, assume running and let snapshot fetch handle it
+    logger.warn(`Progress check failed: ${response.status}`)
+    return { status: "running" }
+  }
+
+  const data = (await response.json()) as Record<string, unknown>
+  logger.info("BrightData progress response", { data })
+
+  const status = data.status as string
+  if (status === "ready" || status === "completed") {
+    return { status: "ready" }
+  }
+  if (status === "failed" || status === "error") {
+    return { status: "failed", error: (data.error as string) || "Unknown error" }
+  }
+  return { status: "running" }
 }
 
 async function fetchSnapshot(
   snapshotId: string,
   apiKey: string
 ): Promise<{ status: "running" | "ready"; data?: BrightDataLinkedInProfile[] }> {
+  // First check progress
+  const progress = await checkProgress(snapshotId, apiKey)
+  if (progress.status === "running") {
+    return { status: "running" }
+  }
+  if (progress.status === "failed") {
+    throw new Error(`BrightData scrape failed: ${progress.error}`)
+  }
+
+  // Progress is ready, fetch the snapshot
   const response = await fetch(`${BRIGHTDATA_API_BASE}/snapshot/${snapshotId}?format=json`, {
     headers: { Authorization: `Bearer ${apiKey}` },
   })
@@ -379,10 +429,12 @@ async function fetchSnapshot(
 
   if (!response.ok) {
     const errorText = await response.text()
+    logger.error("Snapshot fetch failed", { status: response.status, error: errorText })
     throw new Error(`BrightData snapshot fetch failed: ${response.status} - ${errorText}`)
   }
 
   const data = (await response.json()) as BrightDataLinkedInProfile[]
+  logger.info(`Snapshot fetched successfully with ${data.length} profile(s)`)
   return { status: "ready", data }
 }
 

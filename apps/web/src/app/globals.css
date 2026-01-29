@@ -240,4 +240,311 @@
       oklch(86.677% 0.29437 142.431)
     );
   }
+
+  /* Shimmer effect for reasoning component */
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  .shimmer-text {
+    background: linear-gradient(
+      90deg,
+      var(--muted-foreground) 0%,
+      var(--foreground) 50%,
+      var(--muted-foreground) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .shimmer-overlay {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.05) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     MARKDOWN PROSE STYLES - Full support for all markdown syntax
+     ═══════════════════════════════════════════════════════════════════════════ */
+
+  .prose,
+  .prose-invert {
+    color: var(--foreground);
+    line-height: 1.7;
+  }
+
+  /* Headings */
+  .prose h1, .prose-invert h1,
+  .prose h2, .prose-invert h2,
+  .prose h3, .prose-invert h3,
+  .prose h4, .prose-invert h4,
+  .prose h5, .prose-invert h5,
+  .prose h6, .prose-invert h6 {
+    color: var(--foreground);
+    font-weight: 600;
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+    line-height: 1.3;
+  }
+
+  .prose h1, .prose-invert h1 { font-size: 2rem; }
+  .prose h2, .prose-invert h2 { font-size: 1.5rem; }
+  .prose h3, .prose-invert h3 { font-size: 1.25rem; }
+  .prose h4, .prose-invert h4 { font-size: 1.125rem; }
+  .prose h5, .prose-invert h5 { font-size: 1rem; }
+  .prose h6, .prose-invert h6 { font-size: 0.875rem; color: var(--muted-foreground); }
+
+  /* Paragraphs */
+  .prose p, .prose-invert p {
+    margin-top: 0.75em;
+    margin-bottom: 0.75em;
+  }
+
+  /* Bold & Italic */
+  .prose strong, .prose-invert strong {
+    font-weight: 700;
+    color: var(--foreground);
+  }
+
+  .prose em, .prose-invert em {
+    font-style: italic;
+  }
+
+  /* Strikethrough (GFM) */
+  .prose del, .prose-invert del {
+    text-decoration: line-through;
+    color: var(--muted-foreground);
+  }
+
+  /* Links */
+  .prose a, .prose-invert a {
+    color: var(--primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .prose a:hover, .prose-invert a:hover {
+    opacity: 0.8;
+  }
+
+  /* Lists */
+  .prose ul, .prose-invert ul,
+  .prose ol, .prose-invert ol {
+    margin-top: 0.75em;
+    margin-bottom: 0.75em;
+    padding-left: 1.5em;
+  }
+
+  .prose ul, .prose-invert ul {
+    list-style-type: disc;
+  }
+
+  .prose ul ul, .prose-invert ul ul {
+    list-style-type: circle;
+  }
+
+  .prose ul ul ul, .prose-invert ul ul ul {
+    list-style-type: square;
+  }
+
+  .prose ol, .prose-invert ol {
+    list-style-type: decimal;
+  }
+
+  .prose li, .prose-invert li {
+    margin-top: 0.375em;
+    margin-bottom: 0.375em;
+  }
+
+  .prose li > p, .prose-invert li > p {
+    margin-top: 0.25em;
+    margin-bottom: 0.25em;
+  }
+
+  /* Task Lists (GFM) */
+  .prose input[type="checkbox"], .prose-invert input[type="checkbox"] {
+    margin-right: 0.5em;
+    accent-color: var(--primary);
+  }
+
+  .prose li:has(input[type="checkbox"]), .prose-invert li:has(input[type="checkbox"]) {
+    list-style-type: none;
+    margin-left: -1.5em;
+  }
+
+  /* Inline Code */
+  .prose code, .prose-invert code {
+    background: var(--muted);
+    color: var(--foreground);
+    padding: 0.2em 0.4em;
+    border-radius: 0.25rem;
+    font-size: 0.875em;
+    font-family: var(--font-mono);
+  }
+
+  /* Code Blocks */
+  .prose pre, .prose-invert pre {
+    background: var(--muted);
+    padding: 1em;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin-top: 1em;
+    margin-bottom: 1em;
+  }
+
+  .prose pre code, .prose-invert pre code {
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+    font-size: 0.875em;
+  }
+
+  /* Blockquotes */
+  .prose blockquote, .prose-invert blockquote {
+    border-left: 4px solid var(--primary);
+    padding-left: 1em;
+    margin-left: 0;
+    margin-top: 1em;
+    margin-bottom: 1em;
+    font-style: italic;
+    color: var(--muted-foreground);
+  }
+
+  .prose blockquote p, .prose-invert blockquote p {
+    margin: 0;
+  }
+
+  /* Horizontal Rule */
+  .prose hr, .prose-invert hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin-top: 2em;
+    margin-bottom: 2em;
+  }
+
+  /* Tables (GFM) */
+  .prose table, .prose-invert table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1em;
+    margin-bottom: 1em;
+    font-size: 0.875em;
+  }
+
+  .prose th, .prose-invert th {
+    background: var(--muted);
+    font-weight: 600;
+    text-align: left;
+    padding: 0.75em 1em;
+    border: 1px solid var(--border);
+  }
+
+  .prose td, .prose-invert td {
+    padding: 0.75em 1em;
+    border: 1px solid var(--border);
+  }
+
+  .prose tr:nth-child(even), .prose-invert tr:nth-child(even) {
+    background: var(--muted);
+    opacity: 0.5;
+  }
+
+  /* Images */
+  .prose img, .prose-invert img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.5rem;
+    margin-top: 1em;
+    margin-bottom: 1em;
+  }
+
+  /* Footnotes (GFM) */
+  .prose .footnotes, .prose-invert .footnotes {
+    font-size: 0.875em;
+    color: var(--muted-foreground);
+    border-top: 1px solid var(--border);
+    margin-top: 2em;
+    padding-top: 1em;
+  }
+
+  /* Abbreviations */
+  .prose abbr, .prose-invert abbr {
+    text-decoration: underline dotted;
+    cursor: help;
+  }
+
+  /* Keyboard input */
+  .prose kbd, .prose-invert kbd {
+    background: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 0.25rem;
+    padding: 0.1em 0.4em;
+    font-size: 0.875em;
+    font-family: var(--font-mono);
+  }
+
+  /* Mark/Highlight */
+  .prose mark, .prose-invert mark {
+    background: oklch(85% 0.15 90);
+    color: black;
+    padding: 0.1em 0.2em;
+    border-radius: 0.125rem;
+  }
+
+  /* Subscript & Superscript */
+  .prose sub, .prose-invert sub,
+  .prose sup, .prose-invert sup {
+    font-size: 0.75em;
+  }
+
+  /* Small text size variant */
+  .prose-sm {
+    font-size: 0.875rem;
+    line-height: 1.6;
+  }
+
+  .prose-sm h1 { font-size: 1.5rem; }
+  .prose-sm h2 { font-size: 1.25rem; }
+  .prose-sm h3 { font-size: 1.125rem; }
+  .prose-sm h4 { font-size: 1rem; }
+
+  /* Extra small text size variant (for reasoning) */
+  .prose-xs {
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
+
+  .prose-xs h1 { font-size: 1rem; }
+  .prose-xs h2 { font-size: 0.875rem; }
+  .prose-xs h3 { font-size: 0.8125rem; }
+  .prose-xs h4 { font-size: 0.75rem; }
+
+  .prose-xs p {
+    margin-top: 0.5em;
+    margin-bottom: 0.5em;
+  }
+
+  .prose-xs ul, .prose-xs ol {
+    margin-top: 0.5em;
+    margin-bottom: 0.5em;
+    padding-left: 1.25em;
+  }
+
+  .prose-xs li {
+    margin-top: 0.25em;
+    margin-bottom: 0.25em;
+  }
 }
