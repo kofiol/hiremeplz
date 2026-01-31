@@ -2,15 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { ensureUserProfileAndTeam } from "@/lib/auth.server";
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const getSupabasePublicEnv = () => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  throw new Error("Missing Supabase environment variables for auth bootstrap");
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error("Missing Supabase environment variables for auth bootstrap")
+  }
+
+  return { supabaseUrl, supabaseAnonKey }
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const { supabaseUrl, supabaseAnonKey } = getSupabasePublicEnv()
     const authHeader = request.headers.get("Authorization");
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -27,7 +32,7 @@ export async function POST(request: NextRequest) {
 
     const token = authHeader.slice("Bearer ".length).trim();
 
-    const supabase = createClient(SUPABASE_URL as string, SUPABASE_ANON_KEY as string, {
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false,

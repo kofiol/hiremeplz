@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAuth, supabaseAdmin } from "@/lib/auth.server";
+import { getSupabaseAdmin, verifyAuth } from "@/lib/auth.server";
 
 export async function GET(request: NextRequest) {
   try {
     // 1. Verify Authentication
     const authHeader = request.headers.get("Authorization");
     const { teamId, role } = await verifyAuth(authHeader);
+    const supabaseAdmin = getSupabaseAdmin()
 
     // 2. Fetch Team Details (using admin client to bypass RLS if needed, or regular client if policies allow)
     // We'll use supabaseAdmin here for consistency with the auth flow fix, 

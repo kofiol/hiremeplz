@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAuth, supabaseAdmin } from "@/lib/auth.server";
+import { getSupabaseAdmin, verifyAuth } from "@/lib/auth.server";
 
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get("Authorization");
     const authContext = await verifyAuth(authHeader);
+    const supabaseAdmin = getSupabaseAdmin()
 
     const { data: existingAgentSettings, error: existingAgentSettingsError } =
       await supabaseAdmin
@@ -62,6 +63,7 @@ export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("Authorization");
     const authContext = await verifyAuth(authHeader);
+    const supabaseAdmin = getSupabaseAdmin()
 
     const json = await request.json();
     const { messages, collectedData, hasStarted } = json;

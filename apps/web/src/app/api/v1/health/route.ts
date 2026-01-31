@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/auth.server";
+import { getSupabaseAdmin } from "@/lib/auth.server";
 
 export async function GET() {
   try {
     const start = Date.now();
+    const supabaseAdmin = getSupabaseAdmin()
     
     const { error } = await supabaseAdmin
       .from("profiles")

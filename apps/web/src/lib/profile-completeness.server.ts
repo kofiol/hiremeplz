@@ -1,7 +1,7 @@
 "use server";
 
 import "server-only";
-import { supabaseAdmin } from "./auth.server";
+import { getSupabaseAdmin } from "./auth.server";
 import type { AuthContext } from "./auth.server";
 
 export type ProfileCompletenessResult = {
@@ -13,6 +13,7 @@ export async function computeAndUpdateProfileCompleteness(
   context: AuthContext,
 ): Promise<ProfileCompletenessResult> {
   const { userId, teamId } = context;
+  const supabaseAdmin = getSupabaseAdmin()
 
   const [
     profileResult,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { supabaseAdmin, verifyAuth } from "@/lib/auth.server"
+import { getSupabaseAdmin, verifyAuth } from "@/lib/auth.server"
 
 // GET session data
 export async function GET(
@@ -10,6 +10,7 @@ export async function GET(
     const authHeader = request.headers.get("Authorization")
     const { userId } = await verifyAuth(authHeader)
     const { sessionId } = await params
+    const supabaseAdmin = getSupabaseAdmin()
 
     const { data: session, error } = await supabaseAdmin
       .from("interview_sessions")
@@ -41,6 +42,7 @@ export async function PATCH(
     const authHeader = request.headers.get("Authorization")
     const { userId } = await verifyAuth(authHeader)
     const { sessionId } = await params
+    const supabaseAdmin = getSupabaseAdmin()
     const body = await request.json()
 
     const allowedFields: Record<string, unknown> = {}

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin, verifyAuth } from "@/lib/auth.server";
+import { getSupabaseAdmin, verifyAuth } from "@/lib/auth.server";
 
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get("Authorization");
     const { userId, teamId, role } = await verifyAuth(authHeader);
+    const supabaseAdmin = getSupabaseAdmin()
 
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")

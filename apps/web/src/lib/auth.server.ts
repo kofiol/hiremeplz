@@ -1,31 +1,51 @@
-import "server-only";
-import { createClient } from "@supabase/supabase-js";
+import "server-only"
+import { createClient } from "@supabase/supabase-js"
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error("Missing required server-side Supabase env vars");
+type SupabaseEnv = {
+  url: string
+  anonKey: string
+  serviceRoleKey: string
 }
 
-const supabaseUrl = SUPABASE_URL;
-const supabaseAnonKey = SUPABASE_ANON_KEY;
-const supabaseServiceRoleKey = SUPABASE_SERVICE_ROLE_KEY;
+let cachedSupabaseAdmin: ReturnType<typeof createClient> | null = null
 
-export const supabaseAdmin = createClient(
-  supabaseUrl,
-  supabaseServiceRoleKey,
-  {
+const getSupabaseEnv = (): SupabaseEnv => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
+    throw new Error("Missing required server-side Supabase env vars")
+  }
+
+  return {
+    url: supabaseUrl,
+    anonKey: supabaseAnonKey,
+    serviceRoleKey: supabaseServiceRoleKey,
+  }
+}
+
+export const getSupabaseAdmin = () => {
+  if (cachedSupabaseAdmin) {
+    return cachedSupabaseAdmin
+  }
+
+  const { url, serviceRoleKey } = getSupabaseEnv()
+
+  cachedSupabaseAdmin = createClient(url, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
     },
-  },
-);
+  })
+
+  return cachedSupabaseAdmin
+}
 
 export function createUserSupabaseClient(accessToken: string) {
-  return createClient(supabaseUrl, supabaseAnonKey, {
+  const { url, anonKey } = getSupabaseEnv()
+
+  return createClient(url, anonKey, {
     global: {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -35,7 +55,7 @@ export function createUserSupabaseClient(accessToken: string) {
       autoRefreshToken: false,
       persistSession: false,
     },
-  });
+  })
 }
 
 export type AuthContext = {
@@ -50,6 +70,7 @@ export async function ensureUserProfileAndTeam(params: {
   displayName: string | null;
 }): Promise<{ teamId: string }> {
   const { userId, email, displayName } = params;
+  const supabaseAdmin = getSupabaseAdmin()
 
   const { data: existingProfile, error: profileLookupError } = await supabaseAdmin
     .from("profiles")
@@ -158,12 +179,14 @@ export async function verifyAuth(authHeader: string | null): Promise<AuthContext
 
   try {
     const token = authHeader.slice("Bearer ".length).trim();
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    const { url, anonKey } = getSupabaseEnv()
+    const supabaseAdmin = getSupabaseAdmin()
+    const supabase = createClient(url, anonKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false,
       },
-    })
+    });
 
     const {
       data: { user },

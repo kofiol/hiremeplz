@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
-import { supabaseAdmin, verifyAuth } from "@/lib/auth.server"
+import { getSupabaseAdmin, verifyAuth } from "@/lib/auth.server"
 import { analyzeInterview } from "@/lib/agents/analysis-agent"
 
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("Authorization")
     const { userId, teamId } = await verifyAuth(authHeader)
+    const supabaseAdmin = getSupabaseAdmin()
 
     const body = await request.json()
     const { sessionId } = body

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 
-import { verifyAuth, supabaseAdmin } from "@/lib/auth.server"
+import { getSupabaseAdmin, verifyAuth } from "@/lib/auth.server"
 import { computeAndUpdateProfileCompleteness } from "@/lib/profile-completeness.server"
 
 const patchSchema = z.object({
@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get("Authorization")
     const authContext = await verifyAuth(authHeader)
+    const supabaseAdmin = getSupabaseAdmin()
 
     const [profileResult, preferencesResult, agentResult] = await Promise.all([
       supabaseAdmin
@@ -128,6 +129,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const authHeader = request.headers.get("Authorization")
     const authContext = await verifyAuth(authHeader)
+    const supabaseAdmin = getSupabaseAdmin()
 
     const json = await request.json()
     const parsed = patchSchema.safeParse(json)

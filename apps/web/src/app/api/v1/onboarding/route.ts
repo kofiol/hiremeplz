@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyAuth, supabaseAdmin } from "@/lib/auth.server";
+import { getSupabaseAdmin, verifyAuth } from "@/lib/auth.server";
 import { computeAndUpdateProfileCompleteness } from "@/lib/profile-completeness.server";
 
 const onboardingSchema = z.object({
@@ -104,6 +104,7 @@ export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("Authorization");
     const authContext = await verifyAuth(authHeader);
+    const supabaseAdmin = getSupabaseAdmin()
 
     const json = await request.json();
     const parsed = onboardingSchema.safeParse(json);
