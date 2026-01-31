@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gpt-4o-realtime-preview-2025-06-03",
+          model: "gpt-realtime-mini-2025-10-06",
           voice: "alloy",
           modalities: ["audio", "text"],
           input_audio_transcription: {

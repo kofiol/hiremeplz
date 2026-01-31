@@ -1,16 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useSession } from "../../auth/session-provider";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { OnboardingChatbot } from "@/components/onboarding-chatbot";
-import { Activity, BarChart3, Bot, AlertTriangle } from "lucide-react";
+import { OverviewCopilot } from "@/components/overview-copilot";
 
 export default function OverviewPage() {
   const { session, isLoading } = useSession();
-  const router = useRouter();
   const [isGuardChecked, setIsGuardChecked] = useState(false);
   const [profileCompleteness, setProfileCompleteness] = useState<number>(0);
   const [isCheckingCompleteness, setIsCheckingCompleteness] = useState(true);
@@ -52,7 +48,7 @@ export default function OverviewPage() {
     }
 
     guardOverview();
-  }, [isLoading, session, router]);
+  }, [isLoading, session]);
 
   if (!isGuardChecked || isCheckingCompleteness) {
     return (
@@ -70,64 +66,5 @@ export default function OverviewPage() {
     return <OnboardingChatbot />;
   }
 
-  return (
-    <div className="flex-1 space-y-6 p-4 lg:p-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold tracking-tight">Overview</h1>
-        {!isLoading && session ? (
-          <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary">
-            Signed in
-          </Badge>
-        ) : (
-          <Badge variant="outline">Loading</Badge>
-        )}
-      </div>
-      <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @4xl/main:grid-cols-3">
-        <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="size-4 text-muted-foreground" />
-              Today&apos;s actions
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Generate cover letters (N), Apply to top jobs (N), Reply needed (N)
-          </CardContent>
-        </Card>
-        <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="size-4 text-muted-foreground" />
-              Pipeline snapshot
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Empty state
-          </CardContent>
-        </Card>
-        <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Bot className="size-4 text-muted-foreground" />
-              Recent agent runs
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Empty state
-          </CardContent>
-        </Card>
-        <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="size-4 text-muted-foreground" />
-              Alerts
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            New high-score job, daily limit reached, suspicious job detected
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
+  return <OverviewCopilot />;
 }

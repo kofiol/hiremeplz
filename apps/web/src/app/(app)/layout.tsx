@@ -37,7 +37,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
         </div>
         <OnboardingCompletenessReminder />
         {/* Main content area - fills remaining space */}
-        <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
           {children}
         </div>
       </SidebarInset>

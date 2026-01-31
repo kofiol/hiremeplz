@@ -677,7 +677,7 @@ export function OnboardingChatbot() {
 
       const response = await fetch("/api/v1/onboarding/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
         body: JSON.stringify({
           message: initialMessage,
           conversationHistory: [],
@@ -766,7 +766,7 @@ export function OnboardingChatbot() {
 
         const response = await fetch("/api/v1/onboarding/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
           body: JSON.stringify({
             message: text.trim(),
             conversationHistory,
@@ -897,7 +897,7 @@ export function OnboardingChatbot() {
     try {
       const response = await fetch("/api/v1/onboarding/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
         body: JSON.stringify({
           message: trimmed,
           conversationHistory,

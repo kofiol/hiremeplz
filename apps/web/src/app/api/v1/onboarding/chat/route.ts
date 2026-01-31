@@ -8,6 +8,8 @@ import {
   getLinkedInScrapeStatus as getScrapeStatusUtil,
 } from "@/lib/linkedin-scraper.server"
 import { getDataStatus } from "@/lib/onboarding-voice-config"
+import { verifyAuth, getSupabaseAdmin } from "@/lib/auth.server"
+import { computeAndUpdateProfileCompleteness } from "@/lib/profile-completeness.server"
 
 // ============================================================================
 // Zod Schema for Collected Onboarding Data
@@ -128,6 +130,164 @@ const RequestSchema = z.object({
   collectedData: CollectedDataSchema.partial(),
   stream: z.boolean().optional().default(false),
 })
+
+// ============================================================================
+// Persist onboarding data + analysis to Supabase
+// ============================================================================
+
+type ProfileAnalysisData = {
+  overallScore: number
+  categories: {
+    skillsBreadth: number
+    experienceQuality: number
+    ratePositioning: number
+    marketReadiness: number
+  }
+  strengths: string[]
+  improvements: string[]
+  detailedFeedback: string
+}
+
+async function persistOnboardingComplete(
+  authContext: { userId: string; teamId: string },
+  collectedData: Partial<CollectedData>,
+  analysis: ProfileAnalysisData
+) {
+  const supabase = getSupabaseAdmin()
+  const { userId, teamId } = authContext
+  const now = new Date().toISOString()
+
+  // Save display name to profile
+  if (collectedData.fullName) {
+    await supabase
+      .from("profiles")
+      .update({
+        display_name: collectedData.fullName,
+        onboarding_completed_at: now,
+        updated_at: now,
+      })
+      .eq("user_id", userId)
+      .eq("team_id", teamId)
+  } else {
+    await supabase
+      .from("profiles")
+      .update({
+        onboarding_completed_at: now,
+        updated_at: now,
+      })
+      .eq("user_id", userId)
+      .eq("team_id", teamId)
+  }
+
+  // Save skills (delete + insert)
+  if (collectedData.skills && collectedData.skills.length > 0) {
+    await supabase
+      .from("user_skills")
+      .delete()
+      .eq("user_id", userId)
+      .eq("team_id", teamId)
+
+    await supabase.from("user_skills").insert(
+      collectedData.skills.map((s) => ({
+        team_id: teamId,
+        user_id: userId,
+        name: s.name,
+        level: 3,
+        years: null,
+      }))
+    )
+  }
+
+  // Save experiences
+  if (collectedData.experiences && collectedData.experiences.length > 0) {
+    await supabase
+      .from("user_experiences")
+      .delete()
+      .eq("user_id", userId)
+      .eq("team_id", teamId)
+
+    await supabase.from("user_experiences").insert(
+      collectedData.experiences.map((e) => ({
+        team_id: teamId,
+        user_id: userId,
+        title: e.title,
+        company: e.company ?? null,
+        start_date: e.startDate ?? null,
+        end_date: e.endDate ?? null,
+        highlights: e.highlights ?? null,
+      }))
+    )
+  }
+
+  // Save educations
+  if (collectedData.educations && collectedData.educations.length > 0) {
+    await supabase
+      .from("user_educations")
+      .delete()
+      .eq("user_id", userId)
+      .eq("team_id", teamId)
+
+    await supabase.from("user_educations").insert(
+      collectedData.educations.map((e) => ({
+        team_id: teamId,
+        user_id: userId,
+        school: e.school,
+        degree: e.degree ?? null,
+        field: e.field ?? null,
+        start_year: e.startYear ? parseInt(e.startYear) : null,
+        end_year: e.endYear ? parseInt(e.endYear) : null,
+      }))
+    )
+  }
+
+  // Save preferences
+  const hasDreamRate =
+    collectedData.dreamRateMin != null || collectedData.dreamRateMax != null
+  const hasCurrentRate =
+    collectedData.currentRateMin != null || collectedData.currentRateMax != null
+
+  if (hasDreamRate || hasCurrentRate || collectedData.currency) {
+    await supabase.from("user_preferences").upsert(
+      {
+        user_id: userId,
+        team_id: teamId,
+        platforms: ["upwork", "linkedin"],
+        currency: collectedData.currency ?? "USD",
+        hourly_min: collectedData.dreamRateMin ?? null,
+        hourly_max: collectedData.dreamRateMax ?? null,
+        current_hourly_min: collectedData.currentRateMin ?? null,
+        current_hourly_max: collectedData.currentRateMax ?? null,
+        project_types: ["short_gig", "medium_project"],
+        tightness: 3,
+        updated_at: now,
+      },
+      { onConflict: "user_id" }
+    )
+  }
+
+  // Save LinkedIn URL
+  if (collectedData.linkedinUrl) {
+    await supabase
+      .from("profiles")
+      .update({ linkedin_url: collectedData.linkedinUrl })
+      .eq("user_id", userId)
+      .eq("team_id", teamId)
+  }
+
+  // Save profile analysis
+  await supabase.from("profile_analyses").insert({
+    team_id: teamId,
+    user_id: userId,
+    overall_score: analysis.overallScore,
+    categories: analysis.categories,
+    strengths: analysis.strengths,
+    improvements: analysis.improvements,
+    detailed_feedback: analysis.detailedFeedback,
+  })
+
+  // Update completeness score
+  await computeAndUpdateProfileCompleteness({ userId, teamId, role: "leader" })
+}
 
 function readEnvLocalValue(key: string) {
   try {
@@ -306,6 +466,17 @@ const MAX_TOTAL_POLLS = 60
 
 export async function POST(request: NextRequest) {
   try {
+    // Optional auth — used to persist data after analysis
+    const authHeader = request.headers.get("Authorization")
+    let authContext: { userId: string; teamId: string } | null = null
+    if (authHeader) {
+      try {
+        authContext = await verifyAuth(authHeader)
+      } catch {
+        // Auth is optional for chat, ignore failures
+      }
+    }
+
     const json = await request.json()
     const parsed = RequestSchema.safeParse(json)
 
@@ -748,6 +919,19 @@ Include rate analysis comparing their current rate vs dream rate.`
                       improvements: analysis.improvements,
                       detailedFeedback: analysis.detailedFeedback,
                     })
+
+                    // Persist collected data + analysis to Supabase
+                    if (authContext) {
+                      try {
+                        await persistOnboardingComplete(
+                          authContext,
+                          collectedDataState,
+                          analysis
+                        )
+                      } catch (persistError) {
+                        console.error("Failed to persist onboarding data:", persistError)
+                      }
+                    }
                   }
                 }
               } catch (analysisError) {
