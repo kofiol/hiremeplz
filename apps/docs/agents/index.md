@@ -3,13 +3,11 @@ type: spec
 title: Agent System
 status: in-progress
 updated: 2026-01-31
-context_for_agents: >
-  All agents use OpenAI Agents SDK with gpt-4o. Agents are stateless
-  per-invocation but persist state via agent_runs, agent_run_steps, and
-  user_agent_settings tables. Every agent run is audited. Agents follow
-  a "draft, don't send" philosophy for irreversible actions. The system
-  uses structured outputs (Zod schemas) for all agent responses.
-tags: [agents, ai, core]
+context_for_agents: All agents use OpenAI Agents SDK with gpt-4.1-mini for non reasoning tasks and gpt-5-mini for reasoning tasks. Agents are stateless per-invocation but persist state via agent_runs, agent_run_steps, and user_agent_settings tables. Every agent run is audited. Agents follow a "draft, don't send" philosophy for irreversible actions. The system uses structured outputs (Zod schemas) for all agent responses.
+tags:
+  - agents
+  - ai
+  - core
 ---
 
 # Agent System
