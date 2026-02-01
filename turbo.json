@@ -1,7 +1,7 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "ui": "tui",
-  "globalEnv": ["OPENAI_API_KEY", "DATABASE_URL", "SUPABASE_URL"],
+  "globalEnv": ["OPENAI_API_KEY", "DATABASE_URL", "SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "NEXT_PUBLIC_APP_URL"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
