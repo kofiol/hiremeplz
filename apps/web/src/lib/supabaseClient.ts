@@ -4,8 +4,8 @@ import type { Database } from "./database.types";
 const envSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const envSupabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-if (process.env.NODE_ENV === "production" && (!envSupabaseUrl || !envSupabaseAnonKey)) {
-  throw new Error("Missing Supabase environment variables");
+if (typeof window !== "undefined" && (!envSupabaseUrl || !envSupabaseAnonKey)) {
+  console.warn("Missing Supabase environment variables — auth will not work")
 }
 
 const supabaseUrl = envSupabaseUrl ?? "http://localhost:54321";
