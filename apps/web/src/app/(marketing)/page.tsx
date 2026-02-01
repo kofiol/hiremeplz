@@ -117,7 +117,7 @@ export default function LandingPage() {
                   variant="outline"
                   className="mb-6 px-3 py-1.5 border-border text-muted-foreground text-sm font-normal"
                 >
-                  Now in early access
+                  Now live
                 </Badge>
                 <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium leading-[1] mb-6 text-balance">
                   Your{" "}
@@ -170,8 +170,8 @@ export default function LandingPage() {
                   className="text-base px-8 py-6 rounded-full"
                   asChild
                 >
-                  <Link href="https://forms.gle/RYhbUrwwxhWn1dwS9">
-                    Get early access
+                  <Link href="/login">
+                    Get access
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                 </Button>
@@ -578,33 +578,29 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Early Access / CTA */}
-      <section id="waitlist" className="py-24 scroll-mt-28">
+      {/* CTA */}
+      <section id="access" className="py-24 scroll-mt-28">
         <div className="container px-4 md:px-6 mx-auto text-center space-y-8 max-w-2xl">
           <Reveal>
-            <h2 className="text-4xl md:text-5xl font-medium">Early Access</h2>
+            <h2 className="text-4xl md:text-5xl font-medium">Get Started</h2>
           </Reveal>
           <Reveal delayMs={120}>
             <p className="text-lg text-muted-foreground">
-              We&apos;re opening a waitlist for early users. Get priority
-              access, influence the product, and special pricing.
+              Create your account and let your AI agent build your freelance
+              profile in minutes.
             </p>
           </Reveal>
 
           <Reveal delayMs={200}>
             <div className="bg-card border border-border rounded-lg p-8 max-w-sm mx-auto">
               <Button asChild className="w-full rounded-full py-6 text-base">
-                <a
-                  href="https://forms.gle/RYhbUrwwxhWn1dwS9"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Join the waitlist
+                <Link href="/login">
+                  Get access
                   <ArrowRight className="ml-2 h-4 w-4" />
-                </a>
+                </Link>
               </Button>
               <p className="mt-4 text-xs text-muted-foreground">
-                Limited spots available.
+                Free to use. No credit card required.
               </p>
             </div>
           </Reveal>

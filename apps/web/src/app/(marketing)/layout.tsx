@@ -90,10 +90,10 @@ export default function MarketingLayout({ children }: MarketingLayoutProps) {
                 Features
               </Link>
               <Link
-                href="#waitlist"
+                href="/login"
                 className="hover:text-foreground transition-colors"
               >
-                Waitlist
+                Access
               </Link>
             </nav>
 
@@ -131,10 +131,10 @@ export default function MarketingLayout({ children }: MarketingLayoutProps) {
                     </SheetClose>
                     <SheetClose asChild>
                       <Link
-                        href="#waitlist"
+                        href="/login"
                         className="rounded-lg px-3 py-2 text-sm hover:bg-secondary"
                       >
-                        Waitlist
+                        Access
                       </Link>
                     </SheetClose>
                   </div>
@@ -142,19 +142,6 @@ export default function MarketingLayout({ children }: MarketingLayoutProps) {
                     <SheetClose asChild>
                       <Link
                         href="/login"
-                        className={cn(
-                          buttonVariants({
-                            variant: "outline",
-                            className: "w-full rounded-full",
-                          })
-                        )}
-                      >
-                        Log in
-                      </Link>
-                    </SheetClose>
-                    <SheetClose asChild>
-                      <Link
-                        href="#waitlist"
                         className={cn(
                           buttonVariants({
                             className: "w-full rounded-full",
@@ -175,7 +162,7 @@ export default function MarketingLayout({ children }: MarketingLayoutProps) {
               </Link>
 
               <Button size="sm" className="rounded-full" asChild>
-                <Link href="#waitlist">Get Access</Link>
+                <Link href="/login">Get Access</Link>
               </Button>
             </div>
           </div>
@@ -235,10 +222,10 @@ export default function MarketingLayout({ children }: MarketingLayoutProps) {
           </li>
           <li>
             <Link
-              href="https://forms.gle/RYhbUrwwxhWn1dwS9"
+              href="/login"
               className="hover:text-foreground transition-colors"
             >
-              Waitlist
+              Access
             </Link>
           </li>
         </ul>
