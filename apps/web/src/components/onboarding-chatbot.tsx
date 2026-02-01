@@ -1554,6 +1554,12 @@ export function OnboardingChatbot({ onComplete }: { onComplete?: () => void } = 
                             <PromptInputSubmit
                               className="bg-accent text-accent-foreground hover:bg-accent/90"
                               disabled={editingMessageId !== null || !input.trim()}
+                              type="submit"
+                              onClick={(e) => {
+                                if (!input.trim() || !hasStarted) return
+                                e.preventDefault()
+                                sendMessage(input.trim())
+                              }}
                             />
                           )}
                         </PromptInputFooter>
