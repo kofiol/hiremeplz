@@ -1425,13 +1425,32 @@ export function OnboardingChatbot({ onComplete }: { onComplete?: () => void } = 
                           return
                         }
                         try {
+                          // Map collectedData to the onboarding API schema
+                          const payload: Record<string, unknown> = {}
+                          if (collectedData.teamMode) payload.team = { mode: collectedData.teamMode }
+                          if (collectedData.profilePath) payload.path = collectedData.profilePath
+                          if (collectedData.linkedinUrl) payload.profileSetup = { linkedinUrl: collectedData.linkedinUrl }
+                          if (collectedData.experienceLevel) payload.experienceLevel = collectedData.experienceLevel
+                          if (collectedData.skills && collectedData.skills.length > 0) payload.skills = collectedData.skills
+                          if (collectedData.experiences && collectedData.experiences.length > 0) payload.experiences = collectedData.experiences
+                          if (collectedData.educations && collectedData.educations.length > 0) payload.educations = collectedData.educations
+                          if (collectedData.currency || collectedData.dreamRateMin != null || collectedData.currentRateMin != null || collectedData.engagementTypes) {
+                            payload.preferences = {
+                              currency: collectedData.currency ?? "USD",
+                              hourlyMin: collectedData.dreamRateMin,
+                              hourlyMax: collectedData.dreamRateMax,
+                              currentHourlyMin: collectedData.currentRateMin,
+                              currentHourlyMax: collectedData.currentRateMax,
+                              engagementTypes: collectedData.engagementTypes,
+                            }
+                          }
                           await fetch("/api/v1/onboarding", {
                             method: "POST",
                             headers: {
                               "Content-Type": "application/json",
                               Authorization: `Bearer ${session?.access_token}`,
                             },
-                            body: JSON.stringify({}),
+                            body: JSON.stringify(payload),
                           })
                         } catch {
                           // Best-effort — navigate regardless

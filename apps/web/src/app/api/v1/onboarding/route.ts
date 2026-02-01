@@ -448,6 +448,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Mark onboarding as complete
+    await supabaseAdmin
+      .from("profiles")
+      .update({
+        onboarding_completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", authContext.userId)
+      .eq("team_id", authContext.teamId);
+
     const completeness = await computeAndUpdateProfileCompleteness(authContext);
 
     return NextResponse.json(
