@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import { useCallback, useState, useRef, useEffect } from "react"
-import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
 import { useSession } from "@/app/auth/session-provider"
@@ -172,6 +171,12 @@ function getSuggestedReplies(data: CollectedData, messages: ChatMessage[]): stri
   const lastText = lastAssistant?.content.toLowerCase() ?? ""
 
   // Match based on what the assistant just asked (keyword detection)
+  if (lastText.includes("your name") || lastText.includes("name is")) {
+    return []
+  }
+  if (lastText.includes("skill") || lastText.includes("technologies") || lastText.includes("stack")) {
+    return []
+  }
   if (lastText.includes("experience level")) {
     return ["Entry level", "Mid level", "Senior", "Lead"]
   }
@@ -261,7 +266,11 @@ export function OnboardingChatbot({ onComplete }: { onComplete?: () => void } = 
       (session?.user?.user_metadata?.name as string | undefined) ??
       (session?.user?.user_metadata?.display_name as string | undefined)
 
-    return planDisplayName ?? metaName ?? session?.user?.email ?? "there"
+    const name = planDisplayName ?? metaName ?? null
+    if (name && !name.includes("@")) return name
+    const email = name ?? session?.user?.email
+    if (email) return email.split("@")[0]
+    return "there"
   }, [planDisplayName, session?.user])
 
   // Get first name only
@@ -1152,24 +1161,6 @@ export function OnboardingChatbot({ onComplete }: { onComplete?: () => void } = 
             transition={{ duration: 0.35 }}
             className="flex flex-1 flex-col items-center justify-center p-6 min-h-0"
           >
-            {/* Logo */}
-            <motion.div
-              initial={{ opacity: 0, y: 40 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-              className="mb-6"
-            >
-              <div className="inline-flex items-center justify-center rounded-2xl bg-primary/5 p-5 ring-1 ring-primary/10">
-                <Image
-                  src="/favicon.svg"
-                  alt="HireMePlz"
-                  width={56}
-                  height={56}
-                  className="h-10 w-10"
-                />
-              </div>
-            </motion.div>
-
             {/* Title */}
             <motion.h1
               initial={{ opacity: 0, y: 40 }}
@@ -1428,7 +1419,25 @@ export function OnboardingChatbot({ onComplete }: { onComplete?: () => void } = 
                   >
                     <Button
                       size="lg"
-                      onClick={() => onComplete ? onComplete() : router.push("/overview")}
+                      onClick={async () => {
+                        if (onComplete) {
+                          onComplete()
+                          return
+                        }
+                        try {
+                          await fetch("/api/v1/onboarding", {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              Authorization: `Bearer ${session?.access_token}`,
+                            },
+                            body: JSON.stringify({}),
+                          })
+                        } catch {
+                          // Best-effort — navigate regardless
+                        }
+                        router.push("/overview")
+                      }}
                       className="gap-2 px-8 py-5 text-base"
                     >
                       <CheckCircle className="size-5" />

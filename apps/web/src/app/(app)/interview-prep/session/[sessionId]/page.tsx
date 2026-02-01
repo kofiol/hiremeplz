@@ -22,6 +22,7 @@ import {
 } from "@/components/ai-elements/message"
 import {
   type InterviewType,
+  type DifficultyLevel,
   interviewTypeLabels,
   buildInterviewInstructions,
 } from "@/lib/agents/interview-agent"
@@ -350,6 +351,9 @@ export default function InterviewSessionPage() {
         })
         const meData = await meRes.json()
 
+        const difficulty = (sessionData.metrics?.difficulty_level ?? "medium") as DifficultyLevel
+        const sessionLengthMinutes = (sessionData.metrics?.session_length ?? 10) as number
+
         const instructions = buildInterviewInstructions(
           sessionData.interview_type as InterviewType,
           {
@@ -358,7 +362,9 @@ export default function InterviewSessionPage() {
             skills: [],
             experiences: [],
           },
-          sessionData.context
+          sessionData.context,
+          difficulty,
+          sessionLengthMinutes,
         )
 
         // 4. Get mic

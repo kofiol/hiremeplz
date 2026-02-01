@@ -79,7 +79,7 @@ export default function LoginPage() {
     <div className="relative flex min-h-screen flex-col items-center justify-center bg-background p-4">
       
       <div className="mb-8 text-center space-y-2">
-        <h1 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl">
+        <h1 className="text-3xl font-semibold tracking-medium sm:text-4xl md:text-5xl">
           Welcome to HireMePlz
         </h1>
         <p className="mx-auto max-w-[700px] text-muted-foreground md:text-xl">

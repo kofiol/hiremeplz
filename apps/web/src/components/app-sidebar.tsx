@@ -7,7 +7,6 @@ import { usePathname } from "next/navigation"
 
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
-import { SettingsDialog } from "@/components/settings-dialog"
 import { useSession } from "@/app/auth/session-provider"
 import { useUserPlan } from "@/hooks/use-user-plan"
 import {
@@ -24,14 +23,6 @@ import {
 } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 
-function getPlanLabel(plan: string | null) {
-  if (!plan) return "Unknown plan"
-  if (plan === "trial") return "Trial"
-  if (plan === "solo_pro") return "Solo Pro"
-  if (plan === "team_pro") return "Team Pro"
-  return plan
-}
-
 const navMain = [
   { title: "Overview", url: "/overview", icon: Home },
   { title: "Profile", url: "/profile", icon: User },
@@ -42,11 +33,10 @@ const navMain = [
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { session } = useSession()
-  const { plan, displayName, email, isLoading } = useUserPlan()
+  const { displayName, email, isLoading } = useUserPlan()
   const { state, toggleSidebar } = useSidebar()
   const pathname = usePathname()
   const isCollapsed = state === "collapsed"
-  const planLabel = isLoading ? "Loading plan" : getPlanLabel(plan)
   const emailFromSession = session?.user?.email ?? null
   const userNameFromSession =
     (session?.user?.user_metadata?.full_name as string | undefined) ??
@@ -60,6 +50,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const resolvedEmail = email ?? emailFromSession ?? ""
   const resolvedName =
     displayName ?? userNameFromSession ?? resolvedEmail ?? "Account"
+  const subtitle = isLoading ? "Loading..." : resolvedEmail
 
   const user = React.useMemo(
     () => ({
@@ -97,7 +88,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     </div>
                     <div className="grid flex-1 text-left text-sm leading-tight">
                       <span className="truncate font-medium">{resolvedName}</span>
-                      <span className="truncate text-xs">{planLabel}</span>
+                      <span className="truncate text-xs">{subtitle}</span>
                     </div>
                   </Link>
                   <Button
@@ -125,14 +116,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarGroupLabel>Account</SidebarGroupLabel>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SettingsDialog
-                  trigger={
-                    <SidebarMenuButton tooltip="Settings">
-                      <Settings className="size-4" />
-                      <span>Settings</span>
-                    </SidebarMenuButton>
-                  }
-                />
+                <SidebarMenuButton asChild tooltip="Settings" isActive={pathname.startsWith("/settings")}>
+                  <Link href="/settings">
+                    <Settings className="size-4" />
+                    <span>Settings</span>
+                  </Link>
+                </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="Feedback" isActive={pathname === "/feedback"}>

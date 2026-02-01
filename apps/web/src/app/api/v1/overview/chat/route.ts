@@ -3,6 +3,7 @@ import { Agent, run } from "@openai/agents"
 import { z } from "zod"
 import { verifyAuth } from "@/lib/auth.server"
 import { getSupabaseAdmin } from "@/lib/auth.server"
+import { checkRateLimit, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit.server"
 
 // ============================================================================
 // Request Schema
@@ -166,6 +167,9 @@ export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("Authorization")
     const { userId } = await verifyAuth(authHeader)
+
+    const rl = checkRateLimit(userId, RATE_LIMITS.overviewChat)
+    if (!rl.allowed) return rateLimitResponse(rl)
 
     const json = await request.json()
     const parsed = RequestSchema.safeParse(json)

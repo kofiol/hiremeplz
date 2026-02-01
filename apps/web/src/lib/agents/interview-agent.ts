@@ -33,6 +33,8 @@ export const interviewContextPlaceholders: Record<InterviewType, string> = {
     "Describe the company or role... e.g. 'Remote-first fintech startup hiring a senior frontend contractor'",
 }
 
+export type DifficultyLevel = "easy" | "medium" | "hard"
+
 export function buildInterviewInstructions(
   interviewType: InterviewType,
   freelancerProfile: {
@@ -41,7 +43,9 @@ export function buildInterviewInstructions(
     skills: string[]
     experiences: { title: string; company: string | null }[]
   },
-  context?: string | null
+  context?: string | null,
+  difficulty: DifficultyLevel = "medium",
+  sessionLength: number = 10,
 ): string {
   const skillsList = freelancerProfile.skills.slice(0, 10).join(", ")
   const recentRole = freelancerProfile.experiences[0]
@@ -50,6 +54,35 @@ export function buildInterviewInstructions(
     : "freelance professional"
 
   const { role, typeInstructions } = getTypeConfig(interviewType)
+
+  // Map difficulty to question count and behavior
+  const difficultyConfig = {
+    easy: {
+      questionRange: "4-5",
+      coreRange: "2-3",
+      behavior: "- Be encouraging and patient. Accept answers without heavy pushback.\n- Fewer follow-up questions. If an answer is somewhat vague, move on.",
+    },
+    medium: {
+      questionRange: "5-7",
+      coreRange: "3-5",
+      behavior: "- Ask a brief follow-up if the answer is vague: \"Can you elaborate on that?\"\n- Balanced pushback — challenge weak answers but don't be aggressive.",
+    },
+    hard: {
+      questionRange: "6-8",
+      coreRange: "4-6",
+      behavior: "- Frequently ask follow-up questions to dig deeper.\n- Challenge vague or weak answers: \"That's a bit general — can you give me a specific example?\"\n- Apply time pressure: \"Walk me through that quickly.\"\n- Push back on claims: \"How would that work at scale?\"",
+    },
+  }
+
+  // Map session length to question count override
+  const sessionQuestionRange =
+    sessionLength <= 5 ? "3-4" :
+    sessionLength <= 10 ? "5-7" :
+    "7-9"
+
+  const dc = difficultyConfig[difficulty]
+  const effectiveQuestionRange = sessionQuestionRange
+  const effectiveCoreRange = dc.coreRange
 
   const contextBlock = context
     ? `\n## Your Background (as the client)\n${context}\nUse this information to shape your questions and perspective. Reference specifics from this context naturally.`
@@ -72,7 +105,7 @@ ${contextBlock}
 - Vary your acknowledgements: "Great point." "Interesting." "I see." "That makes sense."
 
 ## Interview Structure
-- You will ask exactly 5-7 questions total
+- You will ask exactly ${effectiveQuestionRange} questions total
 - Track which question number you are on internally
 - DO NOT tell the user the question number
 - After the final question, deliver a closing statement
@@ -86,14 +119,14 @@ Goal: Set the scene and start the conversation naturally
 - Ask an easy opening question to get things started
 Exit: After the candidate responds to the opening question
 
-### Phase 2: Core Questions (3-5 questions)
+### Phase 2: Core Questions (${effectiveCoreRange} questions)
 Goal: Evaluate the freelancer from your perspective as ${role}
 ${typeInstructions}
 - Ask ONE question at a time
 - Wait for a complete answer before moving on
-- Occasionally ask a brief follow-up if the answer is vague: "Can you elaborate on that?"
+${dc.behavior}
 - Do NOT repeat questions the candidate already answered
-Exit: After 3-5 core questions have been answered
+Exit: After ${effectiveCoreRange} core questions have been answered
 
 ### Phase 3: Closing (1 question)
 Goal: Wrap up the conversation

@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyAuth } from "@/lib/auth.server"
+import { checkRateLimit, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit.server"
 
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("Authorization")
-    await verifyAuth(authHeader)
+    const { userId } = await verifyAuth(authHeader)
+
+    const rl = checkRateLimit(userId, RATE_LIMITS.onboardingTranscribe)
+    if (!rl.allowed) return rateLimitResponse(rl)
 
     const formData = await request.formData()
     const file = formData.get("file")

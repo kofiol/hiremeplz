@@ -2,6 +2,7 @@ import { NextRequest } from "next/server"
 import { Agent, run } from "@openai/agents"
 import { z } from "zod"
 import { verifyAuth, getSupabaseAdmin } from "@/lib/auth.server"
+import { checkRateLimit, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit.server"
 import { CV_GENERATION_SYSTEM_PROMPT } from "@/lib/cv-generation-prompt"
 
 // ============================================================================
@@ -57,6 +58,9 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get("Authorization")
     const { userId, teamId } = await verifyAuth(authHeader)
 
+    const rl = checkRateLimit(userId, RATE_LIMITS.cvBuilderGenerate)
+    if (!rl.allowed) return rateLimitResponse(rl)
+
     const json = await request.json()
     const parsed = RequestSchema.safeParse(json)
 
@@ -75,9 +79,30 @@ export async function POST(request: NextRequest) {
 
     const { rawProfileData } = parsed.data
 
+    // Fetch AI preferences for vocabulary level
+    const supabaseRead = getSupabaseAdmin()
+    const { data: aiPrefsData } = await supabaseRead
+      .from("user_agent_settings")
+      .select("settings_json")
+      .eq("user_id", userId)
+      .eq("team_id", teamId)
+      .eq("agent_type", "cover_letter")
+      .maybeSingle<{ settings_json: { vocabulary_level?: number } | null }>()
+
+    const vocabularyLevel = aiPrefsData?.settings_json?.vocabulary_level ?? 3
+
+    const vocabDescriptions: Record<number, string> = {
+      1: "Use simple, clear language. Short sentences. Common words only.",
+      2: "Use straightforward language with occasional industry terms.",
+      3: "Use standard professional language with balanced complexity.",
+      4: "Use sophisticated language with varied sentence structure and precise terminology.",
+      5: "Use advanced, academic language with complex structures and specialized vocabulary.",
+    }
+    const vocabInstruction = vocabDescriptions[vocabularyLevel] ?? vocabDescriptions[3]
+
     const agent = new Agent({
       name: "CV Generator",
-      instructions: CV_GENERATION_SYSTEM_PROMPT,
+      instructions: `${CV_GENERATION_SYSTEM_PROMPT}\n\n## Language Complexity\n${vocabInstruction}`,
       model: "gpt-4.1-mini",
       outputType: CVDataSchema,
     })

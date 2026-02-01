@@ -2,6 +2,7 @@ import { NextRequest } from "next/server"
 import { Agent, run } from "@openai/agents"
 import { z } from "zod"
 import { verifyAuth, getSupabaseAdmin } from "@/lib/auth.server"
+import { checkRateLimit, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit.server"
 
 // ============================================================================
 // Analysis Response Schema
@@ -250,6 +251,9 @@ export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("Authorization")
     const { userId, teamId } = await verifyAuth(authHeader)
+
+    const rl = checkRateLimit(userId, RATE_LIMITS.profileAnalysis)
+    if (!rl.allowed) return rateLimitResponse(rl)
 
     // Fetch current profile data
     const profileData = await fetchProfileForAnalysis(userId, teamId)

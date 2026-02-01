@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin, verifyAuth } from "@/lib/auth.server"
+import { checkRateLimit, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit.server"
 import { analyzeInterview } from "@/lib/agents/analysis-agent"
 
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("Authorization")
     const { userId, teamId } = await verifyAuth(authHeader)
+
+    const rl = checkRateLimit(userId, RATE_LIMITS.interviewPrepAnalyze)
+    if (!rl.allowed) return rateLimitResponse(rl)
+
     const supabaseAdmin = getSupabaseAdmin()
 
     const body = await request.json()

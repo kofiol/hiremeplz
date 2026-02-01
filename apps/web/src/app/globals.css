@@ -198,7 +198,7 @@
   }
 
   /* Serif font experiment - page titles and headings */
-  h1, h2, h3 {
+  h1, h2 {
     font-family: var(--font-serif);
   }
 }

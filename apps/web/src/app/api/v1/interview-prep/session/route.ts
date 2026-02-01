@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin, verifyAuth } from "@/lib/auth.server"
+import { checkRateLimit, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit.server"
 
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("Authorization")
     const { userId, teamId } = await verifyAuth(authHeader)
+
+    const rl = checkRateLimit(userId, RATE_LIMITS.interviewPrepSession)
+    if (!rl.allowed) return rateLimitResponse(rl)
+
     const supabaseAdmin = getSupabaseAdmin()
 
     const body = await request.json()
@@ -21,7 +26,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create interview session record
+    // Fetch interview prep settings
+    const { data: interviewSettings } = await supabaseAdmin
+      .from("user_agent_settings")
+      .select("settings_json")
+      .eq("user_id", userId)
+      .eq("team_id", teamId)
+      .eq("agent_type", "interview_prep")
+      .maybeSingle<{
+        settings_json: {
+          difficulty_level?: string
+          session_length?: number
+          auto_save?: boolean
+        } | null
+      }>()
+
+    const difficultyLevel = interviewSettings?.settings_json?.difficulty_level ?? "medium"
+    const sessionLengthMinutes = interviewSettings?.settings_json?.session_length ?? 10
+
+    // Create interview session record with settings in metrics
     const { data: session, error: sessionError } = await supabaseAdmin
       .from("interview_sessions")
       .insert({
@@ -30,6 +53,10 @@ export async function POST(request: NextRequest) {
         interview_type: interviewType,
         status: "pending",
         context,
+        metrics: {
+          difficulty_level: difficultyLevel,
+          session_length: sessionLengthMinutes,
+        },
       })
       .select("id")
       .single<{ id: string }>()
@@ -76,6 +103,8 @@ export async function POST(request: NextRequest) {
       sessionId: session.id,
       clientSecret: realtimeData.client_secret?.value ?? null,
       interviewType,
+      difficultyLevel,
+      sessionLength: sessionLengthMinutes,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unauthorized"

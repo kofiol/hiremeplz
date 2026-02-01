@@ -9,7 +9,6 @@ import {
   SettingsIcon,
   UserIcon,
 } from 'lucide-react';
-import UserMenu from './UserMenu';
 import { Button } from '@/components/ui/button';
 import {
   NavigationMenu,
@@ -63,11 +62,7 @@ export interface Navbar12NavItem {
 
 export interface Navbar12Props extends React.HTMLAttributes<HTMLElement> {
   navigationLinks?: Navbar12NavItem[];
-  userName?: string;
-  userEmail?: string;
-  userAvatar?: string;
   onNavItemClick?: (href: string) => void;
-  onUserItemClick?: (item: string) => void;
 }
 
 // Default navigation links
@@ -85,11 +80,7 @@ export const Navbar12 = React.forwardRef<HTMLElement, Navbar12Props>(
     {
       className,
       navigationLinks = defaultNavigationLinks,
-      userName = 'John Doe',
-      userEmail = 'john@example.com',
-      userAvatar,
       onNavItemClick,
-      onUserItemClick,
       ...props
     },
     ref
@@ -172,15 +163,8 @@ export const Navbar12 = React.forwardRef<HTMLElement, Navbar12Props>(
             </NavigationMenuList>
           </NavigationMenu>
 
-          {/* Right side */}
-          <div className="flex flex-1 items-center justify-end gap-4">
-            <UserMenu
-              userName={userName}
-              userEmail={userEmail}
-              userAvatar={userAvatar}
-              onItemClick={onUserItemClick}
-            />
-          </div>
+          {/* Right side spacer for centering */}
+          <div className="flex flex-1" />
         </div>
       </header>
     );
@@ -190,4 +174,4 @@ export const Navbar12 = React.forwardRef<HTMLElement, Navbar12Props>(
 
 Navbar12.displayName = 'Navbar12';
 
-export { HamburgerIcon, UserMenu };
+export { HamburgerIcon };

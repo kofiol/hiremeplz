@@ -110,6 +110,20 @@ export function OverviewCopilot() {
     return "Good night"
   }, [])
 
+  // Randomize sub-greeting on mount to avoid hydration mismatch
+  const [subGreeting, setSubGreeting] = useState("How may I help you today?")
+
+  useEffect(() => {
+    const options = [
+      "How may I help you today?",
+      "How can I be of service, sir?",
+      "What shall I do for you?",
+      "May I be of assistance?",
+      "Shall I prepare something for you, sir?",
+    ]
+    setSubGreeting(options[Math.floor(Math.random() * options.length)])
+  }, [])
+
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState("")
@@ -322,10 +336,10 @@ export function OverviewCopilot() {
                 className="mb-2 text-3xl font-semibold tracking-tight"
                 suppressHydrationWarning
               >
-                {greeting}, {firstName}
+                {greeting}, {firstName}.
               </h1>
               <p className="text-muted-foreground">
-                How can I help you today?
+                {subGreeting}
               </p>
             </div>
 

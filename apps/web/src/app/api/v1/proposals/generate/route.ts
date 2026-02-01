@@ -3,6 +3,7 @@ import { Agent, run } from "@openai/agents"
 import { z } from "zod"
 import { verifyAuth } from "@/lib/auth.server"
 import { getSupabaseAdmin } from "@/lib/auth.server"
+import { checkRateLimit, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit.server"
 import {
   PROPOSAL_SYSTEM_PROMPT,
   buildProposalPrompt,
@@ -38,6 +39,24 @@ const RequestSchema = z.object({
 // ============================================================================
 // Profile Fetcher
 // ============================================================================
+
+type AiPreferences = {
+  proposal_style?: string
+  proposal_temperature?: number
+  vocabulary_level?: number
+}
+
+async function fetchAiPreferences(userId: string, teamId: string): Promise<AiPreferences> {
+  const supabase = getSupabaseAdmin()
+  const { data } = await supabase
+    .from("user_agent_settings")
+    .select("settings_json")
+    .eq("user_id", userId)
+    .eq("team_id", teamId)
+    .eq("agent_type", "cover_letter")
+    .maybeSingle<{ settings_json: AiPreferences | null }>()
+  return data?.settings_json ?? {}
+}
 
 async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
   const supabase = getSupabaseAdmin()
@@ -142,7 +161,10 @@ export async function POST(request: NextRequest) {
   try {
     // Auth
     const authHeader = request.headers.get("Authorization")
-    const { userId } = await verifyAuth(authHeader)
+    const { userId, teamId } = await verifyAuth(authHeader)
+
+    const rl = checkRateLimit(userId, RATE_LIMITS.proposalsGenerate)
+    if (!rl.allowed) return rateLimitResponse(rl)
 
     // Parse request
     const json = await request.json()
@@ -164,8 +186,11 @@ export async function POST(request: NextRequest) {
     const { jobPosting, platform, customPlatform, skipProfile, tone, length, conversationHistory } =
       parsed.data
 
-    // Fetch profile (skip if toggled off)
-    const profile = skipProfile ? null : await fetchUserProfile(userId)
+    // Fetch profile and AI preferences
+    const [profile, aiPrefs] = await Promise.all([
+      skipProfile ? null : fetchUserProfile(userId),
+      fetchAiPreferences(userId, teamId),
+    ])
 
     // Build prompt — append custom platform name if "other" is selected
     const effectiveJobPosting =
@@ -173,7 +198,22 @@ export async function POST(request: NextRequest) {
         ? `[Platform: ${customPlatform}]\n\n${jobPosting}`
         : jobPosting
 
-    const config: ProposalConfig = { platform, tone, length }
+    // Map saved proposal_style to tone if user didn't explicitly pick one
+    const styleToTone: Record<string, "professional" | "casual" | "confident"> = {
+      professional: "professional",
+      conversational: "casual",
+      technical: "confident",
+    }
+    const effectiveTone = aiPrefs.proposal_style
+      ? styleToTone[aiPrefs.proposal_style] ?? tone
+      : tone
+
+    const config: ProposalConfig = {
+      platform,
+      tone: effectiveTone,
+      length,
+      vocabularyLevel: aiPrefs.vocabulary_level,
+    }
     const userPrompt = buildProposalPrompt(
       config,
       profile,
@@ -181,11 +221,13 @@ export async function POST(request: NextRequest) {
       conversationHistory
     )
 
-    // Create agent
+    // Create agent with saved temperature
+    const temperature = aiPrefs.proposal_temperature ?? 0.7
     const agent = new Agent({
       name: "Proposal Writer",
       instructions: PROPOSAL_SYSTEM_PROMPT,
       model: "gpt-5-mini",
+      modelSettings: { temperature },
     })
 
     // Stream response

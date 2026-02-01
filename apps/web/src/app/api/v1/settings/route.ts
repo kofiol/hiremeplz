@@ -14,21 +14,19 @@ const patchSchema = z.object({
       linkedinUrl: z.string().trim().url().nullable().optional(),
     })
     .optional(),
-  preferences: z
+  aiPreferences: z
     .object({
-      currency: z.string().trim().min(1).optional(),
-      platforms: z.array(z.enum(["upwork", "linkedin"])).optional(),
-      tightness: z.number().int().min(1).max(5).optional(),
-      projectTypes: z.array(z.string().min(1)).optional(),
-      hourlyMin: z.number().min(0).nullable().optional(),
-      hourlyMax: z.number().min(0).nullable().optional(),
-      fixedBudgetMin: z.number().min(0).nullable().optional(),
+      proposalStyle: z.enum(["professional", "conversational", "technical"]).optional(),
+      proposalTemperature: z.number().min(0.3).max(1.0).optional(),
+      vocabularyLevel: z.number().int().min(1).max(5).optional(),
+      feedbackDetail: z.enum(["concise", "balanced", "detailed"]).optional(),
     })
     .optional(),
-  agent: z
+  interviewPrep: z
     .object({
-      timeZones: z.array(z.string().min(1)).optional(),
-      remoteOnly: z.boolean().optional(),
+      autoSave: z.boolean().optional(),
+      difficultyLevel: z.enum(["easy", "medium", "hard"]).optional(),
+      sessionLength: z.number().int().min(5).max(15).optional(),
     })
     .optional(),
 })
@@ -39,7 +37,7 @@ export async function GET(request: NextRequest) {
     const authContext = await verifyAuth(authHeader)
     const supabaseAdmin = getSupabaseAdmin()
 
-    const [profileResult, preferencesResult, agentResult] = await Promise.all([
+    const [profileResult, preferencesResult, coverLetterSettingsResult, interviewPrepSettingsResult] = await Promise.all([
       supabaseAdmin
         .from("profiles")
         .select("display_name, timezone, headline, about, location, linkedin_url")
@@ -55,27 +53,39 @@ export async function GET(request: NextRequest) {
         }>(),
       supabaseAdmin
         .from("user_preferences")
-        .select(
-          "currency, hourly_min, hourly_max, fixed_budget_min, project_types, tightness, platforms",
-        )
+        .select("currency")
         .eq("user_id", authContext.userId)
         .eq("team_id", authContext.teamId)
         .maybeSingle<{
           currency: string | null
-          hourly_min: number | null
-          hourly_max: number | null
-          fixed_budget_min: number | null
-          project_types: string[] | null
-          tightness: number | null
-          platforms: ("upwork" | "linkedin")[] | null
         }>(),
       supabaseAdmin
         .from("user_agent_settings")
         .select("settings_json")
         .eq("user_id", authContext.userId)
         .eq("team_id", authContext.teamId)
-        .eq("agent_type", "job_search")
-        .maybeSingle<{ settings_json: { time_zones?: string[]; remote_only?: boolean } | null }>(),
+        .eq("agent_type", "cover_letter")
+        .maybeSingle<{
+          settings_json: {
+            proposal_style?: string
+            proposal_temperature?: number
+            vocabulary_level?: number
+            feedback_detail?: string
+          } | null
+        }>(),
+      supabaseAdmin
+        .from("user_agent_settings")
+        .select("settings_json")
+        .eq("user_id", authContext.userId)
+        .eq("team_id", authContext.teamId)
+        .eq("agent_type", "interview_prep")
+        .maybeSingle<{
+          settings_json: {
+            auto_save?: boolean
+            difficulty_level?: string
+            session_length?: number
+          } | null
+        }>(),
     ])
 
     if (profileResult.error) {
@@ -95,18 +105,22 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    if (agentResult.error) {
+    if (coverLetterSettingsResult.error) {
       return NextResponse.json(
-        { error: "Failed to load agent settings", details: agentResult.error.message },
+        { error: "Failed to load AI preferences", details: coverLetterSettingsResult.error.message },
         { status: 500 },
       )
     }
 
-    const settingsJson = agentResult.data?.settings_json ?? null
-    const timeZones = Array.isArray(settingsJson?.time_zones)
-      ? settingsJson.time_zones.filter((item): item is string => typeof item === "string" && item.length > 0)
-      : []
-    const remoteOnly = settingsJson?.remote_only === true
+    if (interviewPrepSettingsResult.error) {
+      return NextResponse.json(
+        { error: "Failed to load interview prep settings", details: interviewPrepSettingsResult.error.message },
+        { status: 500 },
+      )
+    }
+
+    const aiPrefsJson = coverLetterSettingsResult.data?.settings_json ?? null
+    const interviewPrepJson = interviewPrepSettingsResult.data?.settings_json ?? null
 
     return NextResponse.json(
       {
@@ -120,16 +134,17 @@ export async function GET(request: NextRequest) {
         },
         preferences: {
           currency: preferencesResult.data?.currency ?? null,
-          hourly_min: preferencesResult.data?.hourly_min ?? null,
-          hourly_max: preferencesResult.data?.hourly_max ?? null,
-          fixed_budget_min: preferencesResult.data?.fixed_budget_min ?? null,
-          project_types: preferencesResult.data?.project_types ?? null,
-          tightness: preferencesResult.data?.tightness ?? null,
-          platforms: preferencesResult.data?.platforms ?? null,
         },
-        agent: {
-          time_zones: timeZones,
-          remote_only: remoteOnly,
+        ai_preferences: {
+          proposal_style: aiPrefsJson?.proposal_style ?? null,
+          proposal_temperature: aiPrefsJson?.proposal_temperature ?? null,
+          vocabulary_level: aiPrefsJson?.vocabulary_level ?? null,
+          feedback_detail: aiPrefsJson?.feedback_detail ?? null,
+        },
+        interview_prep: {
+          auto_save: interviewPrepJson?.auto_save ?? true,
+          difficulty_level: interviewPrepJson?.difficulty_level ?? null,
+          session_length: interviewPrepJson?.session_length ?? null,
         },
       },
       { status: 200 },
@@ -162,7 +177,7 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    const { profile, preferences, agent } = parsed.data
+    const { profile, aiPreferences, interviewPrep } = parsed.data
 
     if (profile) {
       const profileUpdate: Record<string, unknown> = {
@@ -205,147 +220,57 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    if (preferences) {
-      const { data: existingPreferences, error: existingPreferencesError } =
-        await supabaseAdmin
-          .from("user_preferences")
-          .select(
-            "currency, hourly_min, hourly_max, fixed_budget_min, project_types, tightness, platforms",
-          )
-          .eq("user_id", authContext.userId)
-          .eq("team_id", authContext.teamId)
-          .maybeSingle<{
-            currency: string | null
-            hourly_min: number | null
-            hourly_max: number | null
-            fixed_budget_min: number | null
-            project_types: string[] | null
-            tightness: number | null
-            platforms: ("upwork" | "linkedin")[] | null
-          }>()
-
-      if (existingPreferencesError) {
-        return NextResponse.json(
-          {
-            error: {
-              code: "preferences_load_failed",
-              message: "Failed to load preferences",
-              details: existingPreferencesError.message,
-            },
-          },
-          { status: 500 },
-        )
-      }
-
-      const next = {
-        currency:
-          typeof preferences.currency !== "undefined"
-            ? preferences.currency
-            : existingPreferences?.currency ?? null,
-        hourly_min:
-          typeof preferences.hourlyMin !== "undefined"
-            ? preferences.hourlyMin
-            : existingPreferences?.hourly_min ?? null,
-        hourly_max:
-          typeof preferences.hourlyMax !== "undefined"
-            ? preferences.hourlyMax
-            : existingPreferences?.hourly_max ?? null,
-        fixed_budget_min:
-          typeof preferences.fixedBudgetMin !== "undefined"
-            ? preferences.fixedBudgetMin
-            : existingPreferences?.fixed_budget_min ?? null,
-        project_types:
-          typeof preferences.projectTypes !== "undefined"
-            ? preferences.projectTypes
-            : existingPreferences?.project_types ?? null,
-        tightness:
-          typeof preferences.tightness !== "undefined"
-            ? preferences.tightness
-            : existingPreferences?.tightness ?? null,
-        platforms:
-          typeof preferences.platforms !== "undefined"
-            ? preferences.platforms
-            : existingPreferences?.platforms ?? null,
-      }
-
-      const { error: preferencesError } = await supabaseAdmin
-        .from("user_preferences")
-        .upsert(
-          {
-            user_id: authContext.userId,
-            team_id: authContext.teamId,
-            currency: next.currency,
-            hourly_min: next.hourly_min,
-            hourly_max: next.hourly_max,
-            fixed_budget_min: next.fixed_budget_min,
-            project_types:
-              next.project_types && next.project_types.length > 0
-                ? next.project_types
-                : ["short_gig", "medium_project"],
-            tightness: next.tightness ?? 3,
-            platforms: next.platforms ?? ["upwork", "linkedin"],
-            updated_at: new Date().toISOString(),
-          },
-          {
-            onConflict: "user_id",
-          },
-        )
-
-      if (preferencesError) {
-        return NextResponse.json(
-          {
-            error: {
-              code: "preferences_persist_failed",
-              message: "Failed to persist preferences",
-              details: preferencesError.message,
-            },
-          },
-          { status: 500 },
-        )
-      }
-    }
-
-    if (agent) {
-      const { data: existingAgent, error: existingAgentError } = await supabaseAdmin
+    if (aiPreferences) {
+      const { data: existing, error: existingError } = await supabaseAdmin
         .from("user_agent_settings")
         .select("settings_json")
         .eq("user_id", authContext.userId)
         .eq("team_id", authContext.teamId)
-        .eq("agent_type", "job_search")
-        .maybeSingle<{ settings_json: { time_zones?: string[]; remote_only?: boolean } | null }>()
+        .eq("agent_type", "cover_letter")
+        .maybeSingle<{ settings_json: Record<string, unknown> | null }>()
 
-      if (existingAgentError) {
+      if (existingError) {
         return NextResponse.json(
           {
             error: {
-              code: "agent_settings_load_failed",
-              message: "Failed to load agent settings",
-              details: existingAgentError.message,
+              code: "ai_prefs_load_failed",
+              message: "Failed to load AI preferences",
+              details: existingError.message,
             },
           },
           { status: 500 },
         )
       }
 
-      const existingJson = existingAgent?.settings_json ?? {}
-      const timeZones =
-        typeof agent.timeZones !== "undefined" ? agent.timeZones : existingJson.time_zones ?? []
-      const remoteOnly =
-        typeof agent.remoteOnly !== "undefined"
-          ? agent.remoteOnly
-          : existingJson.remote_only ?? false
+      const existingJson = (existing?.settings_json ?? {}) as Record<string, unknown>
 
-      const { error: agentSettingsError } = await supabaseAdmin
+      const settingsJson = {
+        proposal_style:
+          typeof aiPreferences.proposalStyle !== "undefined"
+            ? aiPreferences.proposalStyle
+            : existingJson.proposal_style ?? "professional",
+        proposal_temperature:
+          typeof aiPreferences.proposalTemperature !== "undefined"
+            ? aiPreferences.proposalTemperature
+            : existingJson.proposal_temperature ?? 0.7,
+        vocabulary_level:
+          typeof aiPreferences.vocabularyLevel !== "undefined"
+            ? aiPreferences.vocabularyLevel
+            : existingJson.vocabulary_level ?? 3,
+        feedback_detail:
+          typeof aiPreferences.feedbackDetail !== "undefined"
+            ? aiPreferences.feedbackDetail
+            : existingJson.feedback_detail ?? "balanced",
+      }
+
+      const { error: upsertError } = await supabaseAdmin
         .from("user_agent_settings")
         .upsert(
           {
             team_id: authContext.teamId,
             user_id: authContext.userId,
-            agent_type: "job_search",
-            settings_json: {
-              time_zones: timeZones,
-              remote_only: remoteOnly,
-            },
+            agent_type: "cover_letter",
+            settings_json: settingsJson,
             updated_at: new Date().toISOString(),
           },
           {
@@ -353,13 +278,81 @@ export async function PATCH(request: NextRequest) {
           },
         )
 
-      if (agentSettingsError) {
+      if (upsertError) {
         return NextResponse.json(
           {
             error: {
-              code: "agent_settings_persist_failed",
-              message: "Failed to persist agent settings",
-              details: agentSettingsError.message,
+              code: "ai_prefs_persist_failed",
+              message: "Failed to persist AI preferences",
+              details: upsertError.message,
+            },
+          },
+          { status: 500 },
+        )
+      }
+    }
+
+    if (interviewPrep) {
+      const { data: existing, error: existingError } = await supabaseAdmin
+        .from("user_agent_settings")
+        .select("settings_json")
+        .eq("user_id", authContext.userId)
+        .eq("team_id", authContext.teamId)
+        .eq("agent_type", "interview_prep")
+        .maybeSingle<{ settings_json: Record<string, unknown> | null }>()
+
+      if (existingError) {
+        return NextResponse.json(
+          {
+            error: {
+              code: "interview_prefs_load_failed",
+              message: "Failed to load interview prep settings",
+              details: existingError.message,
+            },
+          },
+          { status: 500 },
+        )
+      }
+
+      const existingJson = (existing?.settings_json ?? {}) as Record<string, unknown>
+
+      const settingsJson = {
+        auto_save:
+          typeof interviewPrep.autoSave !== "undefined"
+            ? interviewPrep.autoSave
+            : existingJson.auto_save ?? true,
+        difficulty_level:
+          typeof interviewPrep.difficultyLevel !== "undefined"
+            ? interviewPrep.difficultyLevel
+            : existingJson.difficulty_level ?? "medium",
+        session_length:
+          typeof interviewPrep.sessionLength !== "undefined"
+            ? interviewPrep.sessionLength
+            : existingJson.session_length ?? 10,
+      }
+
+      const { error: upsertError } = await supabaseAdmin
+        .from("user_agent_settings")
+        .upsert(
+          {
+            team_id: authContext.teamId,
+            user_id: authContext.userId,
+            agent_type: "interview_prep",
+            settings_json: settingsJson,
+            updated_at: new Date().toISOString(),
+          },
+          {
+            onConflict: "team_id,user_id,agent_type",
+          },
+        )
+
+      if (upsertError) {
+        return NextResponse.json(
+          {
+            error: {
+              code: "interview_prefs_persist_failed",
+              message: "Failed to persist interview prep settings",
+              details: upsertError.message,
             },
           },
           { status: 500 },
@@ -401,4 +394,3 @@ export async function PATCH(request: NextRequest) {
     )
   }
 }
-

@@ -9,6 +9,7 @@ import {
 } from "@/lib/linkedin-scraper.server"
 import { getDataStatus } from "@/lib/onboarding-voice-config"
 import { verifyAuth, getSupabaseAdmin } from "@/lib/auth.server"
+import { checkRateLimit, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit.server"
 // Profile completeness is now binary — set to 1 after onboarding
 
 // ============================================================================
@@ -402,7 +403,7 @@ const CONVERSATIONAL_AGENT_INSTRUCTIONS = `You are a friendly, casual onboarding
 - Concise but not robotic
 - No emojis
 - Never be annoying or repetitive
-- **ALWAYS use the user's first name frequently** — aim to include it in almost every response to make the conversation personal and engaging
+- **Use the user's first name frequently ONCE YOU KNOW IT** — aim to include it in almost every response to make the conversation personal and engaging. If you haven't learned their name yet, do NOT use placeholders like "[User's Name]" or "[Name]" — just skip the name entirely.
 
 ## CRITICAL RULES
 1. **ONE question per message** — never ask multiple questions
@@ -526,6 +527,12 @@ export async function POST(request: NextRequest) {
         // Auth is optional for chat, ignore failures
       }
     }
+
+    const rateLimitId = authContext?.userId
+      ?? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+      ?? "anonymous"
+    const rl = checkRateLimit(rateLimitId, RATE_LIMITS.onboardingChat)
+    if (!rl.allowed) return rateLimitResponse(rl)
 
     const json = await request.json()
     const parsed = RequestSchema.safeParse(json)

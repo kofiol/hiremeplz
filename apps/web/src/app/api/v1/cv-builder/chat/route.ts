@@ -2,6 +2,7 @@ import { NextRequest } from "next/server"
 import { Agent, run, tool } from "@openai/agents"
 import { z } from "zod"
 import { verifyAuth, getSupabaseAdmin } from "@/lib/auth.server"
+import { checkRateLimit, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit.server"
 
 // ============================================================================
 // Request Schema
@@ -266,7 +267,10 @@ const updateSkillsParams = z.object({
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("Authorization")
-    const { userId } = await verifyAuth(authHeader)
+    const { userId, teamId } = await verifyAuth(authHeader)
+
+    const rl = checkRateLimit(userId, RATE_LIMITS.cvBuilderChat)
+    if (!rl.allowed) return rateLimitResponse(rl)
 
     const json = await request.json()
     const parsed = RequestSchema.safeParse(json)
@@ -285,6 +289,18 @@ export async function POST(request: NextRequest) {
     }
 
     const { message, cvData, conversationHistory } = parsed.data
+
+    // Fetch AI preferences for feedback detail
+    const supabaseRead = getSupabaseAdmin()
+    const { data: aiPrefsData } = await supabaseRead
+      .from("user_agent_settings")
+      .select("settings_json")
+      .eq("user_id", userId)
+      .eq("team_id", teamId)
+      .eq("agent_type", "cover_letter")
+      .maybeSingle<{ settings_json: { feedback_detail?: string } | null }>()
+
+    const feedbackDetail = aiPrefsData?.settings_json?.feedback_detail ?? "balanced"
 
     // Fetch fresh profile context
     const profileContext = await fetchProfileContext(userId)
@@ -368,9 +384,16 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    const feedbackInstructions: Record<string, string> = {
+      concise: "\n\n## Response Style\nKeep responses brief — 1-2 sentences max per point. Skip explanations unless asked. Focus on what changed, not why.",
+      balanced: "\n\n## Response Style\nProvide moderate detail — explain what you changed and briefly why. 2-4 sentences per response.",
+      detailed: "\n\n## Response Style\nProvide comprehensive analysis — explain what you changed, why, alternatives considered, and specific impact on the CV's effectiveness. Be thorough.",
+    }
+    const feedbackSuffix = feedbackInstructions[feedbackDetail] ?? feedbackInstructions.balanced
+
     const agent = new Agent({
       name: "CV Builder Assistant",
-      instructions: SYSTEM_PROMPT,
+      instructions: SYSTEM_PROMPT + feedbackSuffix,
       model: "gpt-5-mini",
       tools: [updatePersonalInfo, updateSummary, updateExperience, updateEducation, updateSkills],
     })

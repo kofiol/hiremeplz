@@ -6,6 +6,7 @@ export type ProposalConfig = {
   platform: "upwork" | "fiverr" | "linkedin" | "toptal" | "other"
   tone: "professional" | "casual" | "confident"
   length: "short" | "medium" | "long"
+  vocabularyLevel?: number
 }
 
 export type UserProfile = {
@@ -228,9 +229,22 @@ export function buildProposalPrompt(
   }
 
   // Settings
-  sections.push(
-    `## Settings\nPlatform: ${config.platform}\nTone: ${config.tone}\nLength: ${config.length}`
-  )
+  const settingsLines = [
+    `Platform: ${config.platform}`,
+    `Tone: ${config.tone}`,
+    `Length: ${config.length}`,
+  ]
+  if (config.vocabularyLevel) {
+    const vocabDescriptions: Record<number, string> = {
+      1: "Simple and clear language — short sentences, common words, easily understood by anyone",
+      2: "Straightforward language — mostly simple with occasional industry terms",
+      3: "Standard professional language — balanced complexity, appropriate for most contexts",
+      4: "Sophisticated language — varied sentence structure, precise terminology, polished prose",
+      5: "Advanced and academic language — complex sentence structures, specialized vocabulary, authoritative tone",
+    }
+    settingsLines.push(`Vocabulary level: ${config.vocabularyLevel}/5 — ${vocabDescriptions[config.vocabularyLevel] ?? "Standard"}`)
+  }
+  sections.push(`## Settings\n${settingsLines.join("\n")}`)
 
   // Job posting
   sections.push(`## Job Posting\n${jobPosting}`)

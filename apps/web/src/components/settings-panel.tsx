@@ -1,8 +1,10 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
+import { useParams } from "next/navigation"
 import { toast } from "sonner"
-import { FlaskConical, SlidersHorizontal, UserRound } from "lucide-react"
+import { FlaskConical, UserRound, Sparkles, Mic } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -13,25 +15,27 @@ import { useSession } from "@/app/auth/session-provider"
 import { useFocusMode } from "@/hooks/use-focus-mode"
 import { useLinkedinPopup } from "@/hooks/use-linkedin-popup"
 
-type SettingsSectionKey = "profile" | "job_search" | "beta"
+type SettingsSectionKey = "profile" | "ai_preferences" | "interview_prep" | "beta"
 
 type SettingsResponse = {
   profile: {
     display_name: string | null
     timezone: string | null
+    headline: string | null
   }
   preferences: {
     currency: string | null
-    hourly_min: number | null
-    hourly_max: number | null
-    fixed_budget_min: number | null
-    project_types: string[] | null
-    tightness: number | null
-    platforms: ("upwork" | "linkedin")[] | null
   }
-  agent: {
-    time_zones: string[]
-    remote_only: boolean
+  ai_preferences: {
+    proposal_style: "professional" | "conversational" | "technical" | null
+    proposal_temperature: number | null
+    vocabulary_level: number | null
+    feedback_detail: "concise" | "balanced" | "detailed" | null
+  }
+  interview_prep: {
+    auto_save: boolean
+    difficulty_level: "easy" | "medium" | "hard" | null
+    session_length: number | null
   }
 }
 
@@ -40,7 +44,8 @@ const USER_PLAN_REFRESH_EVENT = "user-plan:refresh"
 const sections: { key: SettingsSectionKey; label: string; icon: React.ElementType }[] =
   [
     { key: "profile", label: "Profile", icon: UserRound },
-    { key: "job_search", label: "Job Search", icon: SlidersHorizontal },
+    { key: "ai_preferences", label: "AI Preferences", icon: Sparkles },
+    { key: "interview_prep", label: "Interview Prep", icon: Mic },
     { key: "beta", label: "Beta", icon: FlaskConical },
   ]
 
@@ -56,28 +61,36 @@ export function SettingsPanel({
   onSaveSuccess?: () => void
 }) {
   const { session } = useSession()
+  const params = useParams()
   const [focusModeEnabled, setFocusModeEnabled, focusOpacity, setFocusOpacity] = useFocusMode()
   const [linkedinPopupEnabled, setLinkedinPopupEnabled] = useLinkedinPopup()
 
-  const [activeSection, setActiveSection] =
-    React.useState<SettingsSectionKey>("profile")
+  const sectionParam = (params as { section?: string[] | string }).section
+  const sectionKeyRaw = Array.isArray(sectionParam) ? sectionParam[0] : sectionParam
+  const activeSection: SettingsSectionKey =
+    sectionKeyRaw && sections.some((s) => s.key === sectionKeyRaw)
+      ? (sectionKeyRaw as SettingsSectionKey)
+      : "profile"
+
   const [isLoading, setIsLoading] = React.useState(false)
   const [isSaving, setIsSaving] = React.useState(false)
 
+  // Profile settings
   const [displayName, setDisplayName] = React.useState("")
+  const [timezone, setTimezone] = React.useState("UTC")
+  const [headline, setHeadline] = React.useState("")
   const [currency, setCurrency] = React.useState("USD")
-  const [tightness, setTightness] = React.useState(3)
-  const [remoteOnly, setRemoteOnly] = React.useState(true)
-  const [timeZonesText, setTimeZonesText] = React.useState("")
-  const [platforms, setPlatforms] = React.useState<Set<"upwork" | "linkedin">>(
-    () => new Set(["upwork", "linkedin"]),
-  )
-  const [projectTypes, setProjectTypes] = React.useState<
-    Set<"short_gig" | "medium_project">
-  >(() => new Set(["short_gig", "medium_project"]))
-  const [hourlyMin, setHourlyMin] = React.useState<string>("")
-  const [hourlyMax, setHourlyMax] = React.useState<string>("")
-  const [fixedBudgetMin, setFixedBudgetMin] = React.useState<string>("")
+
+  // AI preferences
+  const [proposalStyle, setProposalStyle] = React.useState<"professional" | "conversational" | "technical">("professional")
+  const [proposalTemperature, setProposalTemperature] = React.useState(0.7)
+  const [vocabularyLevel, setVocabularyLevel] = React.useState(3)
+  const [feedbackDetail, setFeedbackDetail] = React.useState<"concise" | "balanced" | "detailed">("balanced")
+
+  // Interview prep settings
+  const [autoSave, setAutoSave] = React.useState(true)
+  const [difficultyLevel, setDifficultyLevel] = React.useState<"easy" | "medium" | "hard">("medium")
+  const [sessionLength, setSessionLength] = React.useState(10)
 
   const canLoad = Boolean(session?.access_token)
 
@@ -98,44 +111,22 @@ export function SettingsPanel({
 
       const body = (await res.json()) as SettingsResponse
 
+      // Profile settings
       setDisplayName(body.profile.display_name ?? "")
-      setCurrency(body.preferences.currency ?? "USD")
-      setTightness(
-        typeof body.preferences.tightness === "number" ? body.preferences.tightness : 3,
-      )
-      setRemoteOnly(Boolean(body.agent.remote_only))
-      setTimeZonesText((body.agent.time_zones ?? []).join(", "))
+      setTimezone(body.profile.timezone ?? "UTC")
+      setHeadline(body.profile.headline ?? "")
+      setCurrency(body.preferences?.currency ?? "USD")
 
-      setPlatforms(
-        new Set(
-          (body.preferences.platforms ?? ["upwork", "linkedin"]).filter(
-            (p) => p === "upwork" || p === "linkedin",
-          ),
-        ),
-      )
+      // AI preferences
+      setProposalStyle(body.ai_preferences?.proposal_style ?? "professional")
+      setProposalTemperature(body.ai_preferences?.proposal_temperature ?? 0.7)
+      setVocabularyLevel(body.ai_preferences?.vocabulary_level ?? 3)
+      setFeedbackDetail(body.ai_preferences?.feedback_detail ?? "balanced")
 
-      const types = (body.preferences.project_types ?? ["short_gig", "medium_project"])
-        .filter((t) => t === "short_gig" || t === "medium_project") as (
-        | "short_gig"
-        | "medium_project"
-      )[]
-      setProjectTypes(new Set(types))
-
-      setHourlyMin(
-        typeof body.preferences.hourly_min === "number"
-          ? String(body.preferences.hourly_min)
-          : "",
-      )
-      setHourlyMax(
-        typeof body.preferences.hourly_max === "number"
-          ? String(body.preferences.hourly_max)
-          : "",
-      )
-      setFixedBudgetMin(
-        typeof body.preferences.fixed_budget_min === "number"
-          ? String(body.preferences.fixed_budget_min)
-          : "",
-      )
+      // Interview prep settings
+      setAutoSave(body.interview_prep?.auto_save ?? true)
+      setDifficultyLevel(body.interview_prep?.difficulty_level ?? "medium")
+      setSessionLength(body.interview_prep?.session_length ?? 10)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to load settings")
     } finally {
@@ -149,48 +140,36 @@ export function SettingsPanel({
     loadSettings()
   }, [canLoad, enabled, loadSettings])
 
-  const timeZones = React.useMemo(() => {
-    return timeZonesText
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean)
-  }, [timeZonesText])
-
   const payload = React.useMemo(() => {
-    const hourlyMinNumber = hourlyMin.trim().length > 0 ? Number(hourlyMin) : null
-    const hourlyMaxNumber = hourlyMax.trim().length > 0 ? Number(hourlyMax) : null
-    const fixedBudgetMinNumber =
-      fixedBudgetMin.trim().length > 0 ? Number(fixedBudgetMin) : null
-
     return {
       profile: {
         displayName: displayName.trim().length > 0 ? displayName.trim() : null,
+        timezone: timezone.trim().length > 0 ? timezone.trim() : null,
+        headline: headline.trim().length > 0 ? headline.trim() : null,
       },
-      preferences: {
-        currency,
-        platforms: Array.from(platforms),
-        tightness,
-        projectTypes: Array.from(projectTypes),
-        hourlyMin: Number.isFinite(hourlyMinNumber) ? hourlyMinNumber : null,
-        hourlyMax: Number.isFinite(hourlyMaxNumber) ? hourlyMaxNumber : null,
-        fixedBudgetMin: Number.isFinite(fixedBudgetMinNumber) ? fixedBudgetMinNumber : null,
+      aiPreferences: {
+        proposalStyle,
+        proposalTemperature,
+        vocabularyLevel,
+        feedbackDetail,
       },
-      agent: {
-        timeZones,
-        remoteOnly,
+      interviewPrep: {
+        autoSave,
+        difficultyLevel,
+        sessionLength,
       },
     }
   }, [
-    currency,
     displayName,
-    fixedBudgetMin,
-    hourlyMax,
-    hourlyMin,
-    platforms,
-    projectTypes,
-    remoteOnly,
-    tightness,
-    timeZones,
+    timezone,
+    headline,
+    proposalStyle,
+    proposalTemperature,
+    vocabularyLevel,
+    feedbackDetail,
+    autoSave,
+    difficultyLevel,
+    sessionLength,
   ])
 
   async function handleSave() {
@@ -247,10 +226,9 @@ export function SettingsPanel({
             const Icon = section.icon
             const isActive = activeSection === section.key
             return (
-              <button
+              <Link
                 key={section.key}
-                type="button"
-                onClick={() => setActiveSection(section.key)}
+                href={`/settings/${section.key}`}
                 className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-all duration-200 ${
                   isActive
                     ? "bg-primary/10 font-medium text-primary"
@@ -259,7 +237,7 @@ export function SettingsPanel({
               >
                 <Icon className="size-4" />
                 <span className="truncate">{section.label}</span>
-              </button>
+              </Link>
             )
           })}
         </aside>
@@ -269,7 +247,7 @@ export function SettingsPanel({
             <div className="space-y-4">
               <div>
                 <h2 className="text-sm font-medium">Profile</h2>
-                <p className="text-xs text-muted-foreground">Manage your display name and currency</p>
+                <p className="text-xs text-muted-foreground">Your basic information and professional identity</p>
               </div>
               <div className="space-y-5 rounded-xl border border-border/50 bg-card p-5">
                 <div className="space-y-2">
@@ -281,7 +259,39 @@ export function SettingsPanel({
                     placeholder="Jane Doe"
                     disabled={isLoading || !canLoad}
                   />
+                  <p className="text-muted-foreground text-xs">
+                    How you'll appear across the platform.
+                  </p>
                 </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="settings-headline">Professional headline</Label>
+                  <Input
+                    id="settings-headline"
+                    value={headline}
+                    onChange={(e) => setHeadline(e.target.value)}
+                    placeholder="Full-Stack Developer | React & Node.js Expert"
+                    disabled={isLoading || !canLoad}
+                  />
+                  <p className="text-muted-foreground text-xs">
+                    A brief tagline describing what you do.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="settings-timezone">Timezone</Label>
+                  <Input
+                    id="settings-timezone"
+                    value={timezone}
+                    onChange={(e) => setTimezone(e.target.value)}
+                    placeholder="America/New_York"
+                    disabled={isLoading || !canLoad}
+                  />
+                  <p className="text-muted-foreground text-xs">
+                    IANA timezone (e.g., America/New_York, Europe/London, Asia/Tokyo).
+                  </p>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="settings-currency">Currency</Label>
                   <Input
@@ -292,74 +302,89 @@ export function SettingsPanel({
                     disabled={isLoading || !canLoad}
                   />
                   <p className="text-muted-foreground text-xs">
-                    Three-letter code (e.g. USD, EUR).
+                    Three-letter code (e.g. USD, EUR, GBP).
                   </p>
                 </div>
               </div>
             </div>
           )}
 
-          {activeSection === "job_search" && (
+          {activeSection === "ai_preferences" && (
             <div className="space-y-4">
               <div>
-                <h2 className="text-sm font-medium">Job Search</h2>
-                <p className="text-xs text-muted-foreground">Configure platforms, rates, and search preferences</p>
+                <h2 className="text-sm font-medium">AI Preferences</h2>
+                <p className="text-xs text-muted-foreground">Control how AI generates proposals and provides feedback</p>
               </div>
               <div className="space-y-5 rounded-xl border border-border/50 bg-card p-5">
                 <div className="space-y-2">
-                  <Label>Platforms</Label>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {(["upwork", "linkedin"] as const).map((platform) => (
+                  <Label>Proposal writing style</Label>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {(
+                      [
+                        { value: "professional", label: "Professional", desc: "Formal and structured" },
+                        { value: "conversational", label: "Conversational", desc: "Friendly and approachable" },
+                        { value: "technical", label: "Technical", desc: "Detail-oriented" },
+                      ] as const
+                    ).map((style) => (
                       <div
-                        key={platform}
+                        key={style.value}
                         role="button"
                         tabIndex={isLoading || !canLoad ? -1 : 0}
                         aria-disabled={isLoading || !canLoad}
                         onClick={() => {
                           if (isLoading || !canLoad) return
-                          const next = new Set(platforms)
-                          if (next.has(platform)) next.delete(platform)
-                          else next.add(platform)
-                          setPlatforms(next)
+                          setProposalStyle(style.value)
                         }}
                         onKeyDown={(e) => {
                           if (isLoading || !canLoad) return
                           if (e.key !== "Enter" && e.key !== " ") return
                           e.preventDefault()
-                          const next = new Set(platforms)
-                          if (next.has(platform)) next.delete(platform)
-                          else next.add(platform)
-                          setPlatforms(next)
+                          setProposalStyle(style.value)
                         }}
-                        className={`flex items-center justify-between rounded-lg border border-border/50 px-3 py-2 text-sm transition-colors duration-150 hover:border-primary/30 hover:bg-accent/40 ${isLoading || !canLoad ? "pointer-events-none opacity-50" : ""}`}
+                        className={`flex flex-col gap-1 rounded-lg border px-3 py-2.5 text-sm transition-all cursor-pointer ${
+                          proposalStyle === style.value
+                            ? "border-primary bg-primary/5 shadow-sm"
+                            : "border-border/50 hover:border-primary/30 hover:bg-accent/40"
+                        } ${isLoading || !canLoad ? "pointer-events-none opacity-50" : ""}`}
                       >
-                        <span className="capitalize">{platform}</span>
-                        <Checkbox
-                          checked={platforms.has(platform)}
-                          disabled={isLoading || !canLoad}
-                          onCheckedChange={() => {
-                            const next = new Set(platforms)
-                            if (next.has(platform)) next.delete(platform)
-                            else next.add(platform)
-                            setPlatforms(next)
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                        />
+                        <span className="font-medium">{style.label}</span>
+                        <span className="text-xs text-muted-foreground">{style.desc}</span>
                       </div>
                     ))}
                   </div>
+                  <p className="text-muted-foreground text-xs">
+                    Defines the tone and structure of generated proposals.
+                  </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Job search tightness</Label>
+                  <div className="flex items-center justify-between">
+                    <Label>Creativity level (temperature)</Label>
+                    <span className="text-sm text-muted-foreground">{proposalTemperature.toFixed(1)}</span>
+                  </div>
+                  <Slider
+                    value={[proposalTemperature]}
+                    min={0.3}
+                    max={1.0}
+                    step={0.1}
+                    onValueChange={(vals) => setProposalTemperature(vals[0])}
+                    disabled={isLoading || !canLoad}
+                  />
+                  <p className="text-muted-foreground text-xs">
+                    Lower = more conservative and predictable. Higher = more creative and varied.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Vocabulary level</Label>
                   <div className="flex gap-1.5 rounded-full bg-muted/50 p-1">
                     {[1, 2, 3, 4, 5].map((value) => (
                       <button
                         key={value}
                         type="button"
-                        onClick={() => setTightness(value)}
+                        onClick={() => setVocabularyLevel(value)}
                         className={`size-9 rounded-full text-sm transition-all duration-200 ${
-                          value === tightness
+                          value === vocabularyLevel
                             ? "bg-primary text-primary-foreground font-medium shadow-sm"
                             : "text-muted-foreground hover:text-foreground hover:bg-accent/40"
                         }`}
@@ -369,123 +394,128 @@ export function SettingsPanel({
                       </button>
                     ))}
                   </div>
-                  <p className="text-muted-foreground text-xs">1 = broad, 5 = strict.</p>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="settings-hourly-min">Hourly min</Label>
-                    <Input
-                      id="settings-hourly-min"
-                      type="number"
-                      min={0}
-                      value={hourlyMin}
-                      onChange={(e) => setHourlyMin(e.target.value)}
-                      placeholder="0"
-                      disabled={isLoading || !canLoad}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="settings-hourly-max">Hourly max</Label>
-                    <Input
-                      id="settings-hourly-max"
-                      type="number"
-                      min={0}
-                      value={hourlyMax}
-                      onChange={(e) => setHourlyMax(e.target.value)}
-                      placeholder="0"
-                      disabled={isLoading || !canLoad}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="settings-fixed-min">Fixed budget min</Label>
-                    <Input
-                      id="settings-fixed-min"
-                      type="number"
-                      min={0}
-                      value={fixedBudgetMin}
-                      onChange={(e) => setFixedBudgetMin(e.target.value)}
-                      placeholder="0"
-                      disabled={isLoading || !canLoad}
-                    />
-                  </div>
+                  <p className="text-muted-foreground text-xs">
+                    1 = simple and clear, 5 = advanced and academic.
+                  </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Project types</Label>
-                  <div className="grid gap-2 sm:grid-cols-2">
+                  <Label>Feedback detail level</Label>
+                  <div className="grid gap-2 sm:grid-cols-3">
                     {(
                       [
-                        { key: "short_gig", label: "Short gigs" },
-                        { key: "medium_project", label: "Medium projects" },
+                        { value: "concise", label: "Concise", desc: "Brief highlights only" },
+                        { value: "balanced", label: "Balanced", desc: "Moderate detail" },
+                        { value: "detailed", label: "Detailed", desc: "Comprehensive analysis" },
                       ] as const
-                    ).map((item) => (
+                    ).map((level) => (
                       <div
-                        key={item.key}
+                        key={level.value}
                         role="button"
                         tabIndex={isLoading || !canLoad ? -1 : 0}
                         aria-disabled={isLoading || !canLoad}
                         onClick={() => {
                           if (isLoading || !canLoad) return
-                          const next = new Set(projectTypes)
-                          if (next.has(item.key)) next.delete(item.key)
-                          else next.add(item.key)
-                          setProjectTypes(next)
+                          setFeedbackDetail(level.value)
                         }}
                         onKeyDown={(e) => {
                           if (isLoading || !canLoad) return
                           if (e.key !== "Enter" && e.key !== " ") return
                           e.preventDefault()
-                          const next = new Set(projectTypes)
-                          if (next.has(item.key)) next.delete(item.key)
-                          else next.add(item.key)
-                          setProjectTypes(next)
+                          setFeedbackDetail(level.value)
                         }}
-                        className={`flex items-center justify-between rounded-lg border border-border/50 px-3 py-2 text-sm transition-colors duration-150 hover:border-primary/30 hover:bg-accent/40 ${isLoading || !canLoad ? "pointer-events-none opacity-50" : ""}`}
+                        className={`flex flex-col gap-1 rounded-lg border px-3 py-2.5 text-sm transition-all cursor-pointer ${
+                          feedbackDetail === level.value
+                            ? "border-primary bg-primary/5 shadow-sm"
+                            : "border-border/50 hover:border-primary/30 hover:bg-accent/40"
+                        } ${isLoading || !canLoad ? "pointer-events-none opacity-50" : ""}`}
                       >
-                        <span>{item.label}</span>
-                        <Checkbox
-                          checked={projectTypes.has(item.key)}
-                          disabled={isLoading || !canLoad}
-                          onCheckedChange={() => {
-                            const next = new Set(projectTypes)
-                            if (next.has(item.key)) next.delete(item.key)
-                            else next.add(item.key)
-                            setProjectTypes(next)
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                        />
+                        <span className="font-medium">{level.label}</span>
+                        <span className="text-xs text-muted-foreground">{level.desc}</span>
                       </div>
                     ))}
                   </div>
+                  <p className="text-muted-foreground text-xs">
+                    Controls how much feedback you receive on interview practice and proposals.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeSection === "interview_prep" && (
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-sm font-medium">Interview Prep</h2>
+                <p className="text-xs text-muted-foreground">Configure AI interview practice sessions</p>
+              </div>
+              <div className="space-y-5 rounded-xl border border-border/50 bg-card p-5">
+                <div className="space-y-2">
+                  <Label>Difficulty level</Label>
+                  <div className="flex gap-2">
+                    {(
+                      [
+                        { value: "easy", label: "Easy", color: "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20" },
+                        { value: "medium", label: "Medium", color: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20" },
+                        { value: "hard", label: "Hard", color: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20" },
+                      ] as const
+                    ).map((level) => (
+                      <button
+                        key={level.value}
+                        type="button"
+                        onClick={() => setDifficultyLevel(level.value)}
+                        className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all border ${
+                          difficultyLevel === level.value
+                            ? level.color
+                            : "bg-muted/50 text-muted-foreground border-border/50 hover:bg-muted"
+                        }`}
+                        disabled={isLoading || !canLoad}
+                      >
+                        {level.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-muted-foreground text-xs">
+                    Higher difficulty means tougher questions and more pressure.
+                  </p>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="settings-timezones">Time zones</Label>
-                    <Input
-                      id="settings-timezones"
-                      value={timeZonesText}
-                      onChange={(e) => setTimeZonesText(e.target.value)}
-                      placeholder="America/New_York, Europe/London"
-                      disabled={isLoading || !canLoad}
-                    />
-                    <p className="text-muted-foreground text-xs">Comma-separated.</p>
+                <div className="space-y-2">
+                  <Label>Session length (minutes)</Label>
+                  <div className="flex gap-2">
+                    {[5, 10, 15].map((minutes) => (
+                      <button
+                        key={minutes}
+                        type="button"
+                        onClick={() => setSessionLength(minutes)}
+                        className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all border ${
+                          sessionLength === minutes
+                            ? "bg-primary/10 text-primary border-primary/20"
+                            : "bg-muted/50 text-muted-foreground border-border/50 hover:bg-muted"
+                        }`}
+                        disabled={isLoading || !canLoad}
+                      >
+                        {minutes}m
+                      </button>
+                    ))}
                   </div>
+                  <p className="text-muted-foreground text-xs">
+                    Recommended practice duration per session.
+                  </p>
+                </div>
 
-                  <div className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2 transition-colors duration-150 hover:border-primary/30">
-                    <div className="space-y-0.5">
-                      <Label className="text-sm font-medium">Remote only</Label>
-                      <p className="text-muted-foreground text-xs">
-                        Only show fully remote roles.
-                      </p>
-                    </div>
-                    <Checkbox
-                      checked={remoteOnly}
-                      onCheckedChange={(value) => setRemoteOnly(value === true)}
-                      disabled={isLoading || !canLoad}
-                    />
+                <div className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2.5 transition-colors duration-150 hover:border-primary/30">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-medium">Auto-save sessions</Label>
+                    <p className="text-muted-foreground text-xs">
+                      Automatically save transcripts and analysis.
+                    </p>
                   </div>
+                  <Checkbox
+                    checked={autoSave}
+                    onCheckedChange={(value) => setAutoSave(value === true)}
+                    disabled={isLoading || !canLoad}
+                  />
                 </div>
               </div>
             </div>
