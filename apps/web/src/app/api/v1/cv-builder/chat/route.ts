@@ -394,7 +394,7 @@ export async function POST(request: NextRequest) {
     const agent = new Agent({
       name: "CV Builder Assistant",
       instructions: SYSTEM_PROMPT + feedbackSuffix,
-      model: "gpt-5-mini",
+      model: "gpt-4.1-mini",
       tools: [updatePersonalInfo, updateSummary, updateExperience, updateEducation, updateSkills],
     })
 

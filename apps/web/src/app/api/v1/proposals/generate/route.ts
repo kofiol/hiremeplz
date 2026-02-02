@@ -226,7 +226,7 @@ export async function POST(request: NextRequest) {
     const agent = new Agent({
       name: "Proposal Writer",
       instructions: PROPOSAL_SYSTEM_PROMPT,
-      model: "gpt-5-mini",
+      model: "gpt-4.1-mini",
       modelSettings: { temperature },
     })
 
