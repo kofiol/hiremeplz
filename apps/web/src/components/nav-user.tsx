@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { BadgeCheck, Bell, ChevronsUpDown, LogOut } from "lucide-react"
+import { ChevronsUpDown, LogOut } from "lucide-react"
 
 import { supabase } from "@/lib/supabaseClient"
 import {
@@ -13,7 +13,6 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -99,25 +98,6 @@ export function NavUser({
                 </div>
               </div>
             </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem
-                onSelect={() => {
-                  router.push("/settings")
-                }}
-              >
-                <BadgeCheck />
-                Account
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  router.push("/settings")
-                }}
-              >
-                <Bell />
-                Notifications
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onSelect={() => {
