@@ -171,7 +171,7 @@ export default function LandingPage() {
                   asChild
                 >
                   <Link href="/login">
-                    Get access
+                    Try for FREE
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                 </Button>

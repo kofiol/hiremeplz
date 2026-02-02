@@ -148,21 +148,16 @@ export default function MarketingLayout({ children }: MarketingLayoutProps) {
                           })
                         )}
                       >
-                        Get Access
+                        Log in
                       </Link>
                     </SheetClose>
                   </div>
                 </SheetContent>
               </Sheet>
-              <Link
-                href="/login"
-                className="hidden md:block text-sm text-muted-foreground hover:text-foreground px-4 transition-colors"
-              >
-                Log in
-              </Link>
+        
 
               <Button size="sm" className="rounded-full" asChild>
-                <Link href="/login">Get Access</Link>
+                <Link href="/login">Log in</Link>
               </Button>
             </div>
           </div>
