@@ -1,6 +1,14 @@
 import { z } from "zod"
 
 // ============================================================================
+// Helpers
+// ============================================================================
+
+export function isSkipped(value: unknown): value is "skipped" {
+  return value === "skipped"
+}
+
+// ============================================================================
 // Sub-schemas
 // ============================================================================
 
@@ -54,16 +62,16 @@ export const CollectedDataSchema = z.object({
   teamMode: z.union([TeamModeSchema, z.null()]),
   profilePath: z.union([ProfilePathSchema, z.null()]),
   linkedinUrl: z.union([z.string(), z.null()]),
-  experienceLevel: z.union([ExperienceLevelSchema, z.null()]),
-  skills: z.union([z.array(SkillSchema), z.null()]),
-  experiences: z.union([z.array(ExperienceSchema), z.null()]),
-  educations: z.union([z.array(EducationSchema), z.null()]),
-  currentRateMin: z.union([z.number(), z.null()]),
-  currentRateMax: z.union([z.number(), z.null()]),
-  dreamRateMin: z.union([z.number(), z.null()]),
-  dreamRateMax: z.union([z.number(), z.null()]),
+  experienceLevel: z.union([ExperienceLevelSchema, z.literal("skipped"), z.null()]),
+  skills: z.union([z.array(SkillSchema), z.literal("skipped"), z.null()]),
+  experiences: z.union([z.array(ExperienceSchema), z.literal("skipped"), z.null()]),
+  educations: z.union([z.array(EducationSchema), z.literal("skipped"), z.null()]),
+  currentRateMin: z.union([z.number(), z.literal("skipped"), z.null()]),
+  currentRateMax: z.union([z.number(), z.literal("skipped"), z.null()]),
+  dreamRateMin: z.union([z.number(), z.literal("skipped"), z.null()]),
+  dreamRateMax: z.union([z.number(), z.literal("skipped"), z.null()]),
   currency: z.union([CurrencySchema, z.null()]),
-  engagementTypes: z.union([z.array(EngagementTypeSchema), z.null()]),
+  engagementTypes: z.union([z.array(EngagementTypeSchema), z.literal("skipped"), z.null()]),
 })
 
 export type CollectedData = z.infer<typeof CollectedDataSchema>
@@ -190,6 +198,8 @@ export type ChatMessage = {
   }
   reasoning?: ReasoningInfo
   voiceOrigin?: boolean
+  progress?: { step: number; total: number }
+  thinkingDuration?: number
 }
 
 export type SSEEvent =
@@ -235,16 +245,16 @@ export const SaveProfileDataParamsSchema = z.object({
   teamMode: TeamModeSchema.nullable().describe("Working style: 'solo' or 'team' (usually auto-set)"),
   profilePath: ProfilePathSchema.nullable().describe("Onboarding path: 'linkedin' or 'manual' (usually auto-set)"),
   linkedinUrl: z.string().nullable().describe("LinkedIn profile URL (e.g., 'https://linkedin.com/in/username')"),
-  experienceLevel: ExperienceLevelSchema.nullable().describe("Career level: intern_new_grad, entry, mid, senior, lead, or director"),
-  skills: z.array(SkillSchema).nullable().describe("Technical skills and technologies the user knows (e.g., JavaScript, React, AWS). Each skill has a 'name' field."),
-  experiences: z.array(ExperienceSchema).nullable().describe("Work experience history. Each has: title (job title), company, startDate, endDate, highlights."),
-  educations: z.array(EducationSchema).nullable().describe("Educational background. Each has: school (institution name), degree, field (major/area of study), startYear, endYear."),
-  currentRateMin: z.number().nullable().describe("Minimum current hourly rate in dollars (number only, no currency symbol)"),
-  currentRateMax: z.number().nullable().describe("Maximum current hourly rate in dollars (number only, no currency symbol)"),
-  dreamRateMin: z.number().nullable().describe("Minimum target/dream hourly rate in dollars (number only, no currency symbol)"),
-  dreamRateMax: z.number().nullable().describe("Maximum target/dream hourly rate in dollars (number only, no currency symbol)"),
+  experienceLevel: z.union([ExperienceLevelSchema, z.literal("skipped")]).nullable().describe("Career level: intern_new_grad, entry, mid, senior, lead, or director. Use 'skipped' if user wants to skip."),
+  skills: z.union([z.array(SkillSchema), z.literal("skipped")]).nullable().describe("Technical skills and technologies the user knows. Each skill has a 'name' field. Use 'skipped' if user wants to skip."),
+  experiences: z.union([z.array(ExperienceSchema), z.literal("skipped")]).nullable().describe("Work experience history. Each has: title, company, startDate, endDate, highlights. Use 'skipped' if user wants to skip."),
+  educations: z.union([z.array(EducationSchema), z.literal("skipped")]).nullable().describe("Educational background. Each has: school, degree, field, startYear, endYear. Use 'skipped' if user wants to skip."),
+  currentRateMin: z.union([z.number(), z.literal("skipped")]).nullable().describe("Minimum current hourly rate in dollars (number only). Use 'skipped' if user wants to skip."),
+  currentRateMax: z.union([z.number(), z.literal("skipped")]).nullable().describe("Maximum current hourly rate in dollars (number only). Use 'skipped' if user wants to skip."),
+  dreamRateMin: z.union([z.number(), z.literal("skipped")]).nullable().describe("Minimum target/dream hourly rate in dollars (number only). Use 'skipped' if user wants to skip."),
+  dreamRateMax: z.union([z.number(), z.literal("skipped")]).nullable().describe("Maximum target/dream hourly rate in dollars (number only). Use 'skipped' if user wants to skip."),
   currency: CurrencySchema.nullable().describe("Rate currency: USD, EUR, GBP, CAD, or AUD"),
-  engagementTypes: z.array(EngagementTypeSchema).nullable().describe("Preferred work arrangement: array of 'full_time' and/or 'part_time'"),
+  engagementTypes: z.union([z.array(EngagementTypeSchema), z.literal("skipped")]).nullable().describe("Preferred work arrangement: array of 'full_time' and/or 'part_time'. Use 'skipped' if user wants to skip."),
 })
 
 export type SaveProfileDataInput = z.infer<typeof SaveProfileDataParamsSchema>

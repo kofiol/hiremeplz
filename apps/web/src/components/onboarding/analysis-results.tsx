@@ -6,6 +6,7 @@ import { useSession } from "@/app/auth/session-provider"
 import { Button } from "@/components/ui/button"
 import { CheckCircle } from "lucide-react"
 import type { CollectedData } from "@/lib/onboarding/schema"
+import { isSkipped } from "@/lib/onboarding/schema"
 
 type AnalysisResultsProps = {
   collectedData: CollectedData
@@ -35,19 +36,21 @@ export function FinishOnboarding({ collectedData, onComplete }: AnalysisResultsP
             if (collectedData.fullName) payload.fullName = collectedData.fullName
             if (collectedData.teamMode) payload.team = { mode: collectedData.teamMode }
             if (collectedData.profilePath) payload.path = collectedData.profilePath
-            if (collectedData.linkedinUrl && collectedData.linkedinUrl !== "skipped") payload.profileSetup = { linkedinUrl: collectedData.linkedinUrl }
-            if (collectedData.experienceLevel) payload.experienceLevel = collectedData.experienceLevel
-            if (collectedData.skills && collectedData.skills.length > 0) payload.skills = collectedData.skills
-            if (collectedData.experiences && collectedData.experiences.length > 0) payload.experiences = collectedData.experiences
-            if (collectedData.educations && collectedData.educations.length > 0) payload.educations = collectedData.educations
-            if (collectedData.currency || collectedData.dreamRateMin != null || collectedData.currentRateMin != null || collectedData.engagementTypes) {
+            if (collectedData.linkedinUrl && !isSkipped(collectedData.linkedinUrl)) payload.profileSetup = { linkedinUrl: collectedData.linkedinUrl }
+            if (collectedData.experienceLevel && !isSkipped(collectedData.experienceLevel)) payload.experienceLevel = collectedData.experienceLevel
+            if (collectedData.skills && !isSkipped(collectedData.skills) && collectedData.skills.length > 0) payload.skills = collectedData.skills
+            if (collectedData.experiences && !isSkipped(collectedData.experiences) && collectedData.experiences.length > 0) payload.experiences = collectedData.experiences
+            if (collectedData.educations && !isSkipped(collectedData.educations) && collectedData.educations.length > 0) payload.educations = collectedData.educations
+            const hasRates = (!isSkipped(collectedData.dreamRateMin) && collectedData.dreamRateMin != null) || (!isSkipped(collectedData.currentRateMin) && collectedData.currentRateMin != null)
+            const hasEngagement = collectedData.engagementTypes && !isSkipped(collectedData.engagementTypes)
+            if (collectedData.currency || hasRates || hasEngagement) {
               payload.preferences = {
                 currency: collectedData.currency ?? "USD",
-                hourlyMin: collectedData.dreamRateMin,
-                hourlyMax: collectedData.dreamRateMax,
-                currentHourlyMin: collectedData.currentRateMin,
-                currentHourlyMax: collectedData.currentRateMax,
-                engagementTypes: collectedData.engagementTypes,
+                hourlyMin: isSkipped(collectedData.dreamRateMin) ? undefined : collectedData.dreamRateMin,
+                hourlyMax: isSkipped(collectedData.dreamRateMax) ? undefined : collectedData.dreamRateMax,
+                currentHourlyMin: isSkipped(collectedData.currentRateMin) ? undefined : collectedData.currentRateMin,
+                currentHourlyMax: isSkipped(collectedData.currentRateMax) ? undefined : collectedData.currentRateMax,
+                engagementTypes: isSkipped(collectedData.engagementTypes) ? undefined : collectedData.engagementTypes,
               }
             }
             await fetch("/api/v1/onboarding", {

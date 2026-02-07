@@ -3,6 +3,8 @@
 import { useCallback, useState, useRef, useEffect } from "react"
 import type { CollectedData, ChatMessage, ProfileAnalysis, ToolCallInfo, SavedField, InputHint } from "@/lib/onboarding/schema"
 import { INITIAL_COLLECTED_DATA, DEFAULT_INPUT_HINT } from "@/lib/onboarding/schema"
+import { ONBOARDING_STEPS } from "@/lib/onboarding/constants"
+import { countCompletedSteps } from "@/lib/onboarding/data-status"
 import { useOnboardingProgress } from "./use-onboarding-progress"
 
 // ============================================================================
@@ -26,6 +28,7 @@ type UseOnboardingChatReturn = {
   isLoading: boolean
   isStreaming: boolean
   streamingContent: string
+  streamThinkingDuration: number | undefined
   error: string | null
   activeToolCall: { name: string; status: string; elapsed?: number } | null
   toolCallElapsed: number
@@ -37,7 +40,7 @@ type UseOnboardingChatReturn = {
   conversationId: string | null
   startConversation: (overrideName?: string) => Promise<void>
   sendMessage: (text: string) => Promise<void>
-  editMessage: (messageId: string, newText: string) => Promise<void>
+  revertToMessage: (messageId: string) => void
   stopGeneration: () => void
   setError: (error: string | null) => void
   reset: () => void
@@ -78,10 +81,13 @@ export function useOnboardingChat(options: UseOnboardingChatOptions): UseOnboard
   const [reasoningDuration, setReasoningDuration] = useState<number | undefined>()
   const [reasoningPhase, setReasoningPhase] = useState<"thinking" | "evaluating">("thinking")
   const [conversationId, setConversationId] = useState<string | null>(null)
+  const [streamThinkingDuration, setStreamThinkingDuration] = useState<number | undefined>()
 
   const abortControllerRef = useRef<AbortController | null>(null)
   const onDataUpdateRef = useRef(onDataUpdate)
-  onDataUpdateRef.current = onDataUpdate
+  useEffect(() => {
+    onDataUpdateRef.current = onDataUpdate
+  }, [onDataUpdate])
 
   // Progress
   const { isRestoring, loadProgress, saveProgress } = useOnboardingProgress()
@@ -142,9 +148,13 @@ export function useOnboardingChat(options: UseOnboardingChatOptions): UseOnboard
     let savedFieldsResult: SavedField[] | null = null
     let reasoningText = ""
     let reasoningDur: number | undefined
+    const streamStartTime = Date.now()
+    let thinkingDur: number | undefined
+    const midStreamMessages: ChatMessage[] = []
 
     setIsStreaming(true)
     setStreamingContent("")
+    setStreamThinkingDuration(undefined)
 
     const abortHandler = () => {
       wasAborted = true
@@ -174,6 +184,10 @@ export function useOnboardingChat(options: UseOnboardingChatOptions): UseOnboard
             const parsed = JSON.parse(data)
 
             if (parsed.type === "text") {
+              if (thinkingDur === undefined) {
+                thinkingDur = Math.round((Date.now() - streamStartTime) / 1000)
+                setStreamThinkingDuration(thinkingDur)
+              }
               if (!toolCallSeen || !toolCallFinished) {
                 fillerContent += parsed.content
                 setStreamingContent(fillerContent)
@@ -184,6 +198,22 @@ export function useOnboardingChat(options: UseOnboardingChatOptions): UseOnboard
             } else if (parsed.type === "tool_call") {
               if (parsed.status === "started") {
                 toolCallSeen = true
+                // Save the filler message immediately so it doesn't disappear
+                if (fillerContent.trim() && midStreamMessages.length === 0) {
+                  // Compute progress based on current state (before LinkedIn data is merged)
+                  const completed = countCompletedSteps(currentCollectedData)
+                  const total = ONBOARDING_STEPS.length
+                  const fillerMsg: ChatMessage = {
+                    id: generateId(),
+                    role: "assistant",
+                    content: fillerContent.trim(),
+                    thinkingDuration: thinkingDur,
+                    progress: { step: Math.min(completed + 1, total), total },
+                  }
+                  midStreamMessages.push(fillerMsg)
+                  setMessages([...updatedMessages, ...midStreamMessages])
+                  setStreamingContent("")
+                }
                 setActiveToolCall({ name: parsed.name, status: "running" })
               } else if (parsed.status === "completed" || parsed.status === "failed") {
                 toolCallFinished = true
@@ -259,6 +289,7 @@ export function useOnboardingChat(options: UseOnboardingChatOptions): UseOnboard
       signal?.removeEventListener("abort", abortHandler)
       setIsStreaming(false)
       setStreamingContent("")
+      setStreamThinkingDuration(undefined)
       setActiveToolCall(null)
       setIsReasoning(false)
       setReasoningPhase("thinking")
@@ -274,11 +305,13 @@ export function useOnboardingChat(options: UseOnboardingChatOptions): UseOnboard
 
     // Build messages
     const newMessages: ChatMessage[] = []
+    const completed = countCompletedSteps(finalCollectedData)
+    const total = ONBOARDING_STEPS.length
+    const msgProgress = { step: Math.min(completed + 1, total), total }
 
     if (toolCallResult) {
-      if (fillerContent.trim()) {
-        newMessages.push({ id: generateId(), role: "assistant", content: fillerContent.trim() })
-      }
+      // Filler was already saved when tool started (see tool_call handler above)
+      // It already has the progress badge, so don't add it to the tool call or summary
       newMessages.push({ id: generateId(), role: "assistant", content: "", toolCall: toolCallResult })
       if (summaryContent.trim()) {
         newMessages.push({ id: generateId(), role: "assistant", content: summaryContent.trim() })
@@ -291,6 +324,8 @@ export function useOnboardingChat(options: UseOnboardingChatOptions): UseOnboard
           role: "assistant",
           content: combined,
           savedFields: savedFieldsResult ?? undefined,
+          progress: msgProgress,
+          thinkingDuration: thinkingDur,
         })
       }
     }
@@ -302,6 +337,8 @@ export function useOnboardingChat(options: UseOnboardingChatOptions): UseOnboard
         role: "assistant",
         content: "",
         savedFields: savedFieldsResult,
+        progress: msgProgress,
+        thinkingDuration: thinkingDur,
       })
     }
 
@@ -318,7 +355,7 @@ export function useOnboardingChat(options: UseOnboardingChatOptions): UseOnboard
     setReasoningContent("")
     setReasoningDuration(undefined)
 
-    const finalMessages = [...updatedMessages, ...newMessages]
+    const finalMessages = [...updatedMessages, ...midStreamMessages, ...newMessages]
     setMessages(finalMessages)
     updateCollectedData(finalCollectedData as CollectedData)
 
@@ -454,79 +491,40 @@ export function useOnboardingChat(options: UseOnboardingChatOptions): UseOnboard
     }
   }, [messages, collectedData, isLoading, isStreaming, hasStarted, accessToken, conversationId, processStreamResponse, saveProgress, updateCollectedData])
 
-  // ── Edit Message ─────────────────────────────────────────────
-  // FIX: Truncates history after edit point, sends truncated history to backend.
-  // Backend re-derives state from conversation. No more resetting ALL data.
-  const editMessage = useCallback(async (messageId: string, newText: string) => {
-    if (!accessToken || isLoading || isStreaming) return
+  // ── Revert to Message ────────────────────────────────────────
+  // Truncates conversation to just before the target user message and
+  // rebuilds collectedData from savedFields on the remaining messages.
+  const revertToMessage = useCallback((messageId: string) => {
+    if (isLoading || isStreaming) return
 
-    const trimmed = newText.trim()
-    if (!trimmed) return
+    const targetIndex = messages.findIndex((m) => m.id === messageId)
+    if (targetIndex === -1) return
+    if (messages[targetIndex].role !== "user") return
 
-    const editedIndex = messages.findIndex((m) => m.id === messageId)
-    if (editedIndex === -1) return
+    // Keep everything before the target user message
+    const remaining = messages.slice(0, targetIndex)
 
-    const original = messages[editedIndex]
-    if (original.role !== "user") return
+    // Rebuild collectedData from savedFields on remaining messages
+    const rebuilt: CollectedData = { ...INITIAL_COLLECTED_DATA }
+    // Preserve fullName — it's set before chat starts
+    rebuilt.fullName = collectedData.fullName
+    for (const msg of remaining) {
+      if (msg.savedFields) {
+        for (const { field, value } of msg.savedFields) {
+          ;(rebuilt as Record<string, unknown>)[field] = value
+        }
+      }
+    }
 
-    const historyBefore = messages.slice(0, editedIndex)
-    const updatedUserMessage: ChatMessage = { ...original, content: trimmed }
-    const messagesWithEdit = [...historyBefore, updatedUserMessage]
-
-    const conversationHistory = historyBefore
-      .filter((m) => !m.toolCall)
-      .map((m) => ({ role: m.role, content: m.content }))
-
-    setMessages(messagesWithEdit)
-    setIsLoading(true)
+    setMessages(remaining)
+    updateCollectedData(rebuilt)
+    setInputHint(DEFAULT_INPUT_HINT)
     setError(null)
 
-    // Keep current collectedData instead of resetting — let backend re-derive
-    const editData = collectedData
-
-    try {
-      const response = await fetch("/api/v1/onboarding/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          message: trimmed,
-          conversationHistory,
-          collectedData: editData,
-          stream: true,
-        }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null)
-        throw new Error(errorData?.error?.message || "Failed to update message")
-      }
-
-      const contentType = response.headers.get("content-type")
-
-      if (contentType?.includes("text/event-stream")) {
-        await processStreamResponse(response, messagesWithEdit, editData, hasStarted, accessToken)
-      } else {
-        const data = await response.json()
-        const assistantMessage: ChatMessage = {
-          id: generateId(),
-          role: "assistant",
-          content: data.message,
-        }
-        const nextMessages = [...messagesWithEdit, assistantMessage]
-        setMessages(nextMessages)
-        const nextData: CollectedData = data.collectedData ?? editData
-        updateCollectedData(nextData)
-        saveProgress(nextMessages, nextData, hasStarted, accessToken)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update message")
-    } finally {
-      setIsLoading(false)
+    if (accessToken) {
+      saveProgress(remaining, rebuilt, hasStarted, accessToken)
     }
-  }, [messages, collectedData, isLoading, isStreaming, hasStarted, accessToken, processStreamResponse, saveProgress, updateCollectedData])
+  }, [messages, collectedData.fullName, isLoading, isStreaming, hasStarted, accessToken, saveProgress, updateCollectedData])
 
   // ── Stop Generation ───────────────────────────────────────────
   const stopGeneration = useCallback(() => {
@@ -537,6 +535,7 @@ export function useOnboardingChat(options: UseOnboardingChatOptions): UseOnboard
     setIsLoading(false)
     setIsStreaming(false)
     setStreamingContent("")
+    setStreamThinkingDuration(undefined)
     setActiveToolCall(null)
     setIsReasoning(false)
     setReasoningPhase("thinking")
@@ -562,6 +561,7 @@ export function useOnboardingChat(options: UseOnboardingChatOptions): UseOnboard
     isLoading,
     isStreaming,
     streamingContent,
+    streamThinkingDuration,
     error,
     activeToolCall,
     toolCallElapsed,
@@ -573,7 +573,7 @@ export function useOnboardingChat(options: UseOnboardingChatOptions): UseOnboard
     conversationId,
     startConversation,
     sendMessage,
-    editMessage,
+    revertToMessage,
     stopGeneration,
     setError,
     reset,

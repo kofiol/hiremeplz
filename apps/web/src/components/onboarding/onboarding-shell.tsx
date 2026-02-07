@@ -103,6 +103,7 @@ export function OnboardingShell() {
               isLoading={chat.isLoading}
               isStreaming={chat.isStreaming}
               streamingContent={chat.streamingContent}
+              streamThinkingDuration={chat.streamThinkingDuration}
               error={chat.error}
               activeToolCall={chat.activeToolCall}
               toolCallElapsed={chat.toolCallElapsed}
@@ -112,7 +113,7 @@ export function OnboardingShell() {
               reasoningPhase={chat.reasoningPhase}
               accessToken={accessToken}
               onSendMessage={chat.sendMessage}
-              onEditMessage={chat.editMessage}
+              onRevertToMessage={chat.revertToMessage}
               onStopGeneration={chat.stopGeneration}
               onStartConversation={chat.startConversation}
               setError={chat.setError}

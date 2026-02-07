@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { Agent, run, InputGuardrailTripwireTriggered } from "@openai/agents"
+import { Agent, InputGuardrailTripwireTriggered } from "@openai/agents"
 import {
   triggerLinkedInScrape as triggerScrapeUtil,
   getLinkedInScrapeStatus as getScrapeStatusUtil,
@@ -33,8 +33,18 @@ function extractLinkedInUrl(message: string): string | null {
 // LinkedIn Scraping Constants
 // ============================================================================
 
-const POLL_INTERVAL_MS = 5_000
 const MAX_TOTAL_POLLS = 60
+
+/**
+ * Progressive polling for trigger.dev run status.
+ * Checks more frequently early (when scrapes are likely to complete),
+ * then backs off to reduce unnecessary API calls.
+ */
+function getPollIntervalMs(attemptNumber: number): number {
+  if (attemptNumber <= 5) return 2_000 // First 10s: check every 2s
+  if (attemptNumber <= 15) return 5_000 // Next 50s: check every 5s
+  return 10_000 // After 60s: check every 10s
+}
 
 // ============================================================================
 // Prompt Builder
@@ -60,7 +70,7 @@ function createPrompt(
   const isLinkedinSkip =
     linkedinWasAsked &&
     missing.some((m) => m.startsWith("linkedinUrl")) &&
-    /skip|no|don'?t|manual|enter.*manual|pass|nah/i.test(message)
+    /\b(skip|pass|nah)\b|don'?t\s+have|enter\s+manual|no\b\s*[,.]?\s*$/i.test(message)
   if (isLinkedinSkip) {
     missing = missing.filter((m) => !m.startsWith("linkedinUrl"))
     // Mark as skipped so it persists — getDataStatus sees truthy value next turn
@@ -154,32 +164,39 @@ async function handleLinkedInFlow(
   ctx: OnboardingToolContext,
   conversationHistory: Array<{ role: string; content: string }>,
   conversationContext: string,
-  message: string
+  message: string,
+  signal?: AbortSignal
 ): Promise<string> {
   // Phase 1: Filler text
   const fillerAgent = createFillerAgent(
-    "IMPORTANT: The user just provided their LinkedIn profile URL. Acknowledge it briefly and let them know you're fetching their profile data now. Keep your response to 1-2 short sentences. Do NOT call any tools. Do NOT ask any questions — just confirm you're fetching their profile."
+    "OVERRIDE ALL OTHER INSTRUCTIONS. Your ONLY job right now: Acknowledge that the user provided their LinkedIn URL and say you're fetching their profile data. 1-2 sentences max. Do NOT ask any follow-up questions. Do NOT mention what's missing. Do NOT call any tools. Just say thanks and that you're fetching the profile."
   )
   await streamAgentText(
     fillerAgent,
-    createPrompt(ctx.collectedData, conversationContext, message, conversationHistory),
+    `The user just shared their LinkedIn profile URL: ${linkedInUrl}\n\nAcknowledge it briefly and let them know you're importing their data now. DO NOT ask any questions yet.`,
     emit
   )
 
-  // Phase 2: Trigger scrape + poll
+  // Phase 2: Trigger scrape + poll with progressive intervals
   emit({ type: "tool_call", name: "linkedin_scrape", status: "started" })
 
   const { runId } = await triggerScrapeUtil(linkedInUrl)
   let scrapeResult: Awaited<ReturnType<typeof getScrapeStatusUtil>> | null = null
 
+  const startTime = Date.now()
   for (let i = 0; i < MAX_TOTAL_POLLS; i++) {
+    if (signal?.aborted) break
+
     const status = await getScrapeStatusUtil(runId)
     if (status.status === "completed" || status.status === "failed") {
       scrapeResult = status
       break
     }
-    emit({ type: "tool_status", elapsed: (i + 1) * 5 })
-    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+    const elapsed = Math.round((Date.now() - startTime) / 1000)
+    emit({ type: "tool_status", elapsed })
+
+    const interval = getPollIntervalMs(i + 1)
+    await new Promise((r) => setTimeout(r, interval))
   }
 
   if (!scrapeResult) {
@@ -305,8 +322,14 @@ export async function POST(request: NextRequest) {
 
     const linkedInUrl = extractLinkedInUrl(message)
 
-    if (stream) {
-      return createSSEResponse(async (emit) => {
+    if (!stream) {
+      return Response.json(
+        { error: { code: "not_supported", message: "Non-streaming mode is not supported" } },
+        { status: 400 }
+      )
+    }
+
+    return createSSEResponse(async (emit) => {
         // Check for active prompt version
         const promptVersion = await getActivePromptVersion("onboarding", "Conversational Agent")
         const agentModel = promptVersion?.model ?? "gpt-5-mini"
@@ -335,7 +358,7 @@ export async function POST(request: NextRequest) {
         let responseText = ""
 
         if (linkedInUrl) {
-          responseText = await handleLinkedInFlow(emit, linkedInUrl, ctx, conversationHistory, conversationContext, message)
+          responseText = await handleLinkedInFlow(emit, linkedInUrl, ctx, conversationHistory, conversationContext, message, request.signal)
         } else {
           const saveProfileData = createSaveProfileDataTool(ctx)
           const triggerAnalysis = createTriggerAnalysisTool(ctx)
@@ -405,51 +428,6 @@ export async function POST(request: NextRequest) {
           }
         }
       })
-    }
-
-    // Non-streaming response (simplified fallback)
-    let messageText = ""
-
-    if (linkedInUrl) {
-      messageText = "Thanks for sharing your LinkedIn profile! Let me fetch your details..."
-
-      const { runId } = await triggerScrapeUtil(linkedInUrl)
-      let scrapeResult: Awaited<ReturnType<typeof getScrapeStatusUtil>> | null = null
-      for (let i = 0; i < MAX_TOTAL_POLLS; i++) {
-        const status = await getScrapeStatusUtil(runId)
-        if (status.status === "completed" || status.status === "failed") {
-          scrapeResult = status
-          break
-        }
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
-      }
-
-      if (scrapeResult?.status === "completed") {
-        ctx.collectedData = mergeLinkedInData(ctx.collectedData, scrapeResult.profile, linkedInUrl)
-        messageText += "\n\nI found your profile and merged the data! Let me analyze your profile now."
-      } else {
-        messageText += "\n\nSorry, I couldn't fetch your profile. Would you like to try again or set up manually?"
-      }
-    } else {
-      const saveProfileData = createSaveProfileDataTool(ctx)
-      const triggerAnalysis = createTriggerAnalysisTool(ctx)
-      const setInputHint = createSetInputHintTool(ctx)
-      const agent = createConversationalAgent([saveProfileData, triggerAnalysis, setInputHint])
-      const result = await run(
-        agent,
-        createPrompt(ctx.collectedData, conversationContext, message, conversationHistory)
-      )
-      messageText =
-        typeof result.finalOutput === "string"
-          ? result.finalOutput
-          : String(result.finalOutput ?? "")
-    }
-
-    return Response.json({
-      message: messageText,
-      collectedData: ctx.collectedData,
-      isComplete: ctx.analysisRequested,
-    })
   } catch (error) {
     console.error("Onboarding chat error:", error)
 

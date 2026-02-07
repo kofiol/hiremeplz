@@ -52,6 +52,7 @@ type SavedFieldsCardProps = {
 
 function formatValue(field: string, value: unknown): string {
   if (value === null || value === undefined) return ""
+  if (value === "skipped") return "Skipped"
 
   // Handle arrays
   if (Array.isArray(value)) {
@@ -98,8 +99,8 @@ function formatValue(field: string, value: unknown): string {
 export function SavedFieldsCard({ fields, className }: SavedFieldsCardProps) {
   const [showDetails, setShowDetails] = useState(false)
 
-  // Filter out hidden/internal fields
-  const visibleFields = fields.filter(({ field }) => !HIDDEN_FIELDS.has(field))
+  // Filter out hidden/internal fields and "skipped" values (no point showing them)
+  const visibleFields = fields.filter(({ field, value }) => !HIDDEN_FIELDS.has(field) && value !== "skipped")
 
   // Show loading briefly, then reveal details
   useEffect(() => {

@@ -1,22 +1,30 @@
 "use client"
 
-import { useRef, useState, useEffect, useCallback } from "react"
 import {
   Message,
   MessageContent,
   MessageBubble,
 } from "@/components/ai-elements/message"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Reasoning } from "@/components/ui/reasoning"
 import { ProfileAnalysisResults, ProfileScoreCard } from "@/components/ui/score-indicator"
 import { Button } from "@/components/ui/button"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import {
-  Check,
   CheckCircle,
   OctagonX,
-  Pencil,
-  X,
+  Undo2,
   XCircle,
 } from "lucide-react"
 import type { ChatMessage as ChatMessageType } from "@/lib/onboarding/schema"
@@ -25,101 +33,56 @@ import { SavedFieldsCard } from "./saved-fields-card"
 type ChatMessageProps = {
   message: ChatMessageType
   isEditable: boolean
-  onEdit: (messageId: string, newText: string) => void
-  isEditDisabled: boolean
+  onRevert: (messageId: string) => void
 }
 
 export function ChatMessageItem({
   message,
   isEditable,
-  onEdit,
-  isEditDisabled,
+  onRevert,
 }: ChatMessageProps) {
-  const editTextareaRef = useRef<HTMLTextAreaElement>(null)
-  const [isEditing, setIsEditing] = useState(false)
-  const [editText, setEditText] = useState("")
-
-  useEffect(() => {
-    if (!isEditing) return
-    editTextareaRef.current?.focus()
-    editTextareaRef.current?.setSelectionRange(
-      editTextareaRef.current.value.length,
-      editTextareaRef.current.value.length
-    )
-  }, [isEditing])
-
-  const beginEdit = useCallback(() => {
-    setIsEditing(true)
-    setEditText(message.content)
-  }, [message.content])
-
-  const cancelEdit = useCallback(() => {
-    setIsEditing(false)
-    setEditText("")
-  }, [])
-
-  const saveEdit = useCallback(() => {
-    if (!editText.trim()) return
-    onEdit(message.id, editText.trim())
-    setIsEditing(false)
-    setEditText("")
-  }, [editText, message.id, onEdit])
-
   return (
     <Message from={message.role} hideAvatar>
       <MessageContent>
         {message.role === "user" ? (
           <div className="relative max-w-full">
-            {isEditing ? (
-              <div className="w-full max-w-[80%]">
-                <textarea
-                  ref={editTextareaRef}
-                  value={editText}
-                  onChange={(e) => setEditText(e.target.value)}
-                  className="w-full resize-none rounded-lg border bg-background px-3 py-2 text-base leading-relaxed outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                  rows={Math.min(6, Math.max(2, editText.split("\n").length))}
-                  disabled={isEditDisabled}
-                />
-                <div className="mt-2 flex items-center justify-end gap-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={cancelEdit}
-                    disabled={isEditDisabled}
-                  >
-                    <X className="size-4" />
-                    Cancel
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={saveEdit}
-                    disabled={isEditDisabled || !editText.trim()}
-                  >
-                    <Check className="size-4" />
-                    Save
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="group relative flex items-center gap-2">
-                {isEditable && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={beginEdit}
-                    className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-                  >
-                    <Pencil className="size-4" />
-                  </Button>
-                )}
-                <MessageBubble variant="user" className="text-base">
-                  {message.content}
-                </MessageBubble>
-              </div>
-            )}
+            <div className="group relative flex items-center gap-2">
+              {isEditable && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      title="Revert conversation to this point"
+                      className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                    >
+                      <Undo2 className="size-4" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Revert conversation?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will remove all messages and saved profile data after this point. You can&apos;t undo this action.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => onRevert(message.id)}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Revert
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+              <MessageBubble variant="user" className="text-base">
+                {message.content}
+              </MessageBubble>
+            </div>
           </div>
         ) : message.toolCall ? (
           <div className="flex items-center gap-2 rounded-lg border border-border/30 bg-accent px-3 py-2 text-sm text-accent-foreground">
@@ -172,6 +135,29 @@ export function ChatMessageItem({
           </div>
         ) : (
           <div className="space-y-3">
+            {message.progress && (
+              <div className="flex items-center gap-2 rounded-lg border border-border/30 bg-accent px-3 py-1.5 text-sm text-accent-foreground w-fit">
+                <span>{message.progress.step}/{message.progress.total}</span>
+                <div className="flex gap-0.5">
+                  {Array.from({ length: message.progress.total }, (_, i) => (
+                    <div
+                      key={i}
+                      className={`h-1 w-3 rounded-full transition-colors ${
+                        i < message.progress!.step ? "bg-primary" : "bg-muted-foreground/20"
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+            {message.thinkingDuration != null && message.thinkingDuration > 0 && (
+              <Reasoning
+                isStreaming={false}
+                content=""
+                duration={message.thinkingDuration}
+                phase="thinking"
+              />
+            )}
             {message.content && (
               <div className="prose prose-base max-w-none text-foreground">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>

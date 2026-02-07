@@ -31,13 +31,16 @@ export function createSaveProfileDataTool(ctx: OnboardingToolContext) {
 
 FIELD GUIDE (use the correct field for each data type):
 - fullName: User's name (e.g., "John Smith")
-- skills: Technical skills/technologies (e.g., JavaScript, React, AWS) — array of {name: string}. Include context when provided, e.g. "React (5 years, primary)" as the name.
-- experiences: Work history — array of {title, company, startDate, endDate, highlights}
-- educations: Schools/degrees — array of {school, degree, field, startYear, endYear}
-- experienceLevel: Career level (intern_new_grad, entry, mid, senior, lead, director)
-- currentRateMin/Max: Current hourly rate range (numbers only)
-- dreamRateMin/Max: Target hourly rate range (numbers only)
-- engagementTypes: Work style array (["full_time"], ["part_time"], or both)
+- skills: Technical skills/technologies — array of {name: string}. Include context when provided, e.g. "React (5 years, primary)" as the name. **If user wants to skip, save "skipped".**
+- experiences: Work history — array of {title, company, startDate, endDate, highlights}. **If user wants to skip, save "skipped".**
+- educations: Schools/degrees — array of {school, degree, field, startYear, endYear}. **If user wants to skip, save "skipped".**
+- experienceLevel: Career level (intern_new_grad, entry, mid, senior, lead, director). **If user wants to skip, save "skipped".**
+- currentRateMin/Max: Current hourly rate range (numbers only). **If user wants to skip, save "skipped" to currentRateMin.**
+- dreamRateMin/Max: Target hourly rate range (numbers only). **If user wants to skip, save "skipped" to dreamRateMin.**
+- engagementTypes: Work style array (["full_time"], ["part_time"], or both). **If user wants to skip, save "skipped".**
+- linkedinUrl: LinkedIn profile URL. **If user wants to skip or enter manually, save "skipped".**
+
+**SKIPPING**: When user explicitly says "skip", "pass", "nah", "I don't want to answer this", save the string "skipped" as the value for that field.
 
 CRITICAL: The 'highlights' field on experiences is the MOST IMPORTANT field for analysis scoring.
 Save accomplishments, tech stack used, scale/impact (team size, users, revenue), and outcomes.
@@ -52,6 +55,14 @@ CRITICAL RULES:
     execute: async (_input: unknown) => {
       const args = _input as SaveProfileDataInput
       const savedFields: SavedField[] = []
+
+      // Currency should only be saved alongside rate fields — the agent
+      // tends to hallucinate "USD" as a default when saving unrelated data.
+      const savingRates = args.currentRateMin != null || args.currentRateMax != null
+        || args.dreamRateMin != null || args.dreamRateMax != null
+      if (!savingRates && args.currency != null) {
+        args.currency = null
+      }
 
       // Log what the agent is trying to save for debugging
       const nonNullFields = Object.entries(args)
@@ -122,11 +133,20 @@ export function createSetInputHintTool(ctx: OnboardingToolContext) {
 // trigger_profile_analysis tool
 // ============================================================================
 
+// Helper: Check if a field is present or explicitly skipped
+function isFieldComplete(value: unknown): boolean {
+  if (value === "skipped") return true
+  if (typeof value === "string" && value.length > 0) return true
+  if (Array.isArray(value) && value.length > 0) return true
+  if (typeof value === "number") return true
+  return false
+}
+
 export function createTriggerAnalysisTool(ctx: OnboardingToolContext) {
   return tool({
     name: "trigger_profile_analysis",
     description:
-      "Trigger profile analysis. ONLY call when STILL NEEDED says 'ALL DONE'. You must have asked about LinkedIn (user provided URL or explicitly skipped) before calling this.",
+      "Trigger profile analysis. ONLY call when all 8 steps have been asked (answered OR skipped). User can skip any step by saying 'skip', 'pass', 'nah', etc.",
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     parameters: z.object({ confirmation: z.literal(true) }) as any,
     execute: async () => {
@@ -136,52 +156,62 @@ export function createTriggerAnalysisTool(ctx: OnboardingToolContext) {
       const orig = ctx.originalCollectedData
       const data = ctx.collectedData
 
-      // Fields that were missing at turn start — these required user input
-      // across prior turns and cannot be filled by fabrication.
-      const missingAtStart: string[] = []
-      if (!orig.fullName) missingAtStart.push("fullName")
-      if (!orig.teamMode) missingAtStart.push("teamMode")
-      if (!orig.experienceLevel) missingAtStart.push("experienceLevel")
-      if (!orig.skills || orig.skills.length < 3)
-        missingAtStart.push("skills (need at least 3)")
-      if (!orig.experiences || orig.experiences.length < 1)
-        missingAtStart.push("experiences (need at least 1)")
-      if (!orig.educations || orig.educations.length < 1)
-        missingAtStart.push("educations (need at least 1)")
-      if (orig.currentRateMin == null && orig.currentRateMax == null)
-        missingAtStart.push("currentRate")
-      if (orig.dreamRateMin == null && orig.dreamRateMax == null)
-        missingAtStart.push("dreamRate")
-      if (!orig.engagementTypes || orig.engagementTypes.length < 1)
-        missingAtStart.push("engagementTypes")
+      // Anti-fabrication guardrail: count fields that were missing at turn
+      // start but now have REAL data (not "skipped"). Multiple skips in one
+      // turn are fine — the user can skip as many as they want. But filling
+      // 2+ fields with real data in a single turn suggests fabrication.
+      let newRealFields = 0
+      const stillMissing: string[] = []
 
-      // Allow at most 1 field group to have been newly provided this turn
-      // (the field the user was actually asked about).
-      // If 2+ groups were missing at turn start, the agent skipped questions.
-      if (missingAtStart.length > 1) {
-        return `CANNOT trigger analysis yet. Still missing from PRIOR turns: ${missingAtStart.join(", ")}. You skipped questions — go back and ask the user about each one. Do NOT call trigger_profile_analysis again until all items are resolved.`
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const d = data as Record<string, any>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const o = orig as Record<string, any>
+
+      function checkField(fieldName: string, origComplete: boolean, nowComplete: boolean, skipKey: string) {
+        if (!origComplete) {
+          if (!nowComplete) {
+            stillMissing.push(fieldName)
+          } else if (d[skipKey] !== "skipped") {
+            newRealFields++
+          }
+          // If value is "skipped" — that's fine, user explicitly skipped
+        }
       }
 
-      // Final check: current data must actually be complete
+      checkField("fullName", isFieldComplete(o.fullName), isFieldComplete(d.fullName), "fullName")
+      checkField("teamMode", isFieldComplete(o.teamMode), isFieldComplete(d.teamMode), "teamMode")
+      checkField("experienceLevel", isFieldComplete(o.experienceLevel), isFieldComplete(d.experienceLevel), "experienceLevel")
+      checkField("linkedinUrl", isFieldComplete(o.linkedinUrl), isFieldComplete(d.linkedinUrl), "linkedinUrl")
+      checkField("skills", isFieldComplete(o.skills), isFieldComplete(d.skills), "skills")
+      checkField("experiences", isFieldComplete(o.experiences), isFieldComplete(d.experiences), "experiences")
+      checkField("educations", isFieldComplete(o.educations), isFieldComplete(d.educations), "educations")
+      checkField("currentRate", isFieldComplete(o.currentRateMin) || isFieldComplete(o.currentRateMax), isFieldComplete(d.currentRateMin) || isFieldComplete(d.currentRateMax), "currentRateMin")
+      checkField("dreamRate", isFieldComplete(o.dreamRateMin) || isFieldComplete(o.dreamRateMax), isFieldComplete(d.dreamRateMin) || isFieldComplete(d.dreamRateMax), "dreamRateMin")
+      checkField("engagementTypes", isFieldComplete(o.engagementTypes), isFieldComplete(d.engagementTypes), "engagementTypes")
+
+      // Block if agent fabricated 2+ real fields in one turn
+      if (newRealFields > 1 && stillMissing.length === 0) {
+        return `CANNOT trigger analysis yet. Too many fields were filled in a single turn — this looks like fabrication. Go back and ask the user about each remaining step.`
+      }
+
+      // Final check: current data must be complete (answered OR skipped)
       const missing: string[] = []
-      if (!data.fullName) missing.push("fullName")
-      if (!data.teamMode) missing.push("teamMode")
-      if (!data.experienceLevel) missing.push("experienceLevel")
-      if (!data.skills || data.skills.length < 3)
-        missing.push("skills (need at least 3)")
-      if (!data.experiences || data.experiences.length < 1)
-        missing.push("experiences (need at least 1)")
-      if (!data.educations || data.educations.length < 1)
-        missing.push("educations (need at least 1)")
-      if (data.currentRateMin == null && data.currentRateMax == null)
+      if (!isFieldComplete(data.fullName)) missing.push("fullName")
+      if (!isFieldComplete(data.teamMode)) missing.push("teamMode")
+      if (!isFieldComplete(data.experienceLevel)) missing.push("experienceLevel")
+      if (!isFieldComplete(data.linkedinUrl)) missing.push("linkedinUrl")
+      if (!isFieldComplete(data.skills)) missing.push("skills")
+      if (!isFieldComplete(data.experiences)) missing.push("experiences")
+      if (!isFieldComplete(data.educations)) missing.push("educations")
+      if (!isFieldComplete(data.currentRateMin) && !isFieldComplete(data.currentRateMax))
         missing.push("currentRate")
-      if (data.dreamRateMin == null && data.dreamRateMax == null)
+      if (!isFieldComplete(data.dreamRateMin) && !isFieldComplete(data.dreamRateMax))
         missing.push("dreamRate")
-      if (!data.engagementTypes || data.engagementTypes.length < 1)
-        missing.push("engagementTypes")
+      if (!isFieldComplete(data.engagementTypes)) missing.push("engagementTypes")
 
       if (missing.length > 0) {
-        return `CANNOT trigger analysis yet. Still missing: ${missing.join(", ")}. Ask the user about these first. Do NOT call trigger_profile_analysis again until all items are resolved.`
+        return `CANNOT trigger analysis yet. Still missing: ${missing.join(", ")}. Ask the user about these (or let them skip). Do NOT call trigger_profile_analysis again until all 8 steps are addressed.`
       }
 
       ctx.analysisRequested = true

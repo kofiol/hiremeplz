@@ -1,6 +1,6 @@
 import { Agent, run, OutputGuardrailTripwireTriggered, type OutputGuardrail } from "@openai/agents"
 import type { CollectedData, ProfileAnalysis } from "@/lib/onboarding/schema"
-import { ProfileAnalysisSchema, ProfileAnalysisJsonSchema } from "@/lib/onboarding/schema"
+import { ProfileAnalysisSchema, ProfileAnalysisJsonSchema, isSkipped } from "@/lib/onboarding/schema"
 import { EXPERIENCE_LEVEL_LABELS } from "@/lib/onboarding/constants"
 import { PROFILE_ANALYSIS_INSTRUCTIONS } from "./agent"
 import { getSupabaseAdmin } from "@/lib/auth.server"
@@ -27,11 +27,14 @@ export async function runProfileAnalysis(
   const analysisModel = promptVersion?.model ?? "gpt-5.1"
   const analysisModelSettings = promptVersion?.modelSettings ?? { reasoning_effort: "high" }
 
+  // Replace "skipped" strings with null so the analysis agent sees clean data
+  const cleanedData = cleanForAnalysis(collectedData)
+
   const prompt = `
 Analyze this freelancer profile and provide comprehensive feedback:
 
 Profile Data:
-${JSON.stringify(collectedData, null, 2)}
+${JSON.stringify(cleanedData, null, 2)}
 
 Provide an overall score (0-100), category scores, strengths, improvements, and detailed feedback.
 Include rate analysis comparing their current rate vs dream rate.`
@@ -128,12 +131,22 @@ Include rate analysis comparing their current rate vs dream rate.`
 // Persist onboarding data + analysis to Supabase
 // ============================================================================
 
+function cleanForAnalysis(data: Partial<CollectedData>): Partial<CollectedData> {
+  const clean = { ...data }
+  for (const [key, value] of Object.entries(clean)) {
+    if (isSkipped(value)) {
+      ;(clean as Record<string, unknown>)[key] = null
+    }
+  }
+  return clean
+}
+
 function generateHeadline(data: Partial<CollectedData>): string {
-  const level = data.experienceLevel
+  const level = data.experienceLevel && !isSkipped(data.experienceLevel)
     ? EXPERIENCE_LEVEL_LABELS[data.experienceLevel] ?? ""
     : ""
-  const topSkills = (data.skills ?? []).slice(0, 4).map((s) => s.name)
-  const primaryTitle = data.experiences?.[0]?.title ?? "Freelancer"
+  const topSkills = isSkipped(data.skills) ? [] : (data.skills ?? []).slice(0, 4).map((s) => s.name)
+  const primaryTitle = (!isSkipped(data.experiences) && data.experiences?.[0]?.title) ?? "Freelancer"
 
   if (topSkills.length > 0) {
     return `${level} ${primaryTitle} — ${topSkills.join(" | ")}`.trim()
@@ -143,16 +156,17 @@ function generateHeadline(data: Partial<CollectedData>): string {
 
 function generateAbout(data: Partial<CollectedData>): string {
   const name = data.fullName ?? "Freelancer"
-  const level = data.experienceLevel
+  const level = data.experienceLevel && !isSkipped(data.experienceLevel)
     ? EXPERIENCE_LEVEL_LABELS[data.experienceLevel]?.toLowerCase() ?? ""
     : ""
-  const skills = (data.skills ?? []).map((s) => s.name)
-  const latestExp = data.experiences?.[0]
+  const skills = isSkipped(data.skills) ? [] : (data.skills ?? []).map((s) => s.name)
+  const latestExp = isSkipped(data.experiences) ? undefined : data.experiences?.[0]
+  const engagementTypes = isSkipped(data.engagementTypes) ? undefined : data.engagementTypes
   const engagementLabel =
-    data.engagementTypes?.includes("full_time") &&
-    data.engagementTypes?.includes("part_time")
+    engagementTypes?.includes("full_time") &&
+    engagementTypes?.includes("part_time")
       ? "full-time and part-time"
-      : data.engagementTypes?.includes("full_time")
+      : engagementTypes?.includes("full_time")
         ? "full-time"
         : "part-time"
 
@@ -211,7 +225,7 @@ export async function persistOnboardingComplete(
     .eq("user_id", userId)
     .eq("team_id", teamId)
 
-  if (collectedData.skills && collectedData.skills.length > 0) {
+  if (collectedData.skills && !isSkipped(collectedData.skills) && collectedData.skills.length > 0) {
     await supabase
       .from("user_skills")
       .delete()
@@ -229,7 +243,7 @@ export async function persistOnboardingComplete(
     )
   }
 
-  if (collectedData.experiences && collectedData.experiences.length > 0) {
+  if (collectedData.experiences && !isSkipped(collectedData.experiences) && collectedData.experiences.length > 0) {
     await supabase
       .from("user_experiences")
       .delete()
@@ -249,7 +263,7 @@ export async function persistOnboardingComplete(
     )
   }
 
-  if (collectedData.educations && collectedData.educations.length > 0) {
+  if (collectedData.educations && !isSkipped(collectedData.educations) && collectedData.educations.length > 0) {
     await supabase
       .from("user_educations")
       .delete()
@@ -270,9 +284,11 @@ export async function persistOnboardingComplete(
   }
 
   const hasDreamRate =
-    collectedData.dreamRateMin != null || collectedData.dreamRateMax != null
+    !isSkipped(collectedData.dreamRateMin) && collectedData.dreamRateMin != null ||
+    !isSkipped(collectedData.dreamRateMax) && collectedData.dreamRateMax != null
   const hasCurrentRate =
-    collectedData.currentRateMin != null || collectedData.currentRateMax != null
+    !isSkipped(collectedData.currentRateMin) && collectedData.currentRateMin != null ||
+    !isSkipped(collectedData.currentRateMax) && collectedData.currentRateMax != null
 
   if (hasDreamRate || hasCurrentRate || collectedData.currency) {
     await supabase.from("user_preferences").upsert(
@@ -281,10 +297,10 @@ export async function persistOnboardingComplete(
         team_id: teamId,
         platforms: ["upwork", "linkedin"],
         currency: collectedData.currency ?? "USD",
-        hourly_min: collectedData.dreamRateMin ?? null,
-        hourly_max: collectedData.dreamRateMax ?? null,
-        current_hourly_min: collectedData.currentRateMin ?? null,
-        current_hourly_max: collectedData.currentRateMax ?? null,
+        hourly_min: isSkipped(collectedData.dreamRateMin) ? null : (collectedData.dreamRateMin ?? null),
+        hourly_max: isSkipped(collectedData.dreamRateMax) ? null : (collectedData.dreamRateMax ?? null),
+        current_hourly_min: isSkipped(collectedData.currentRateMin) ? null : (collectedData.currentRateMin ?? null),
+        current_hourly_max: isSkipped(collectedData.currentRateMax) ? null : (collectedData.currentRateMax ?? null),
         project_types: ["short_gig", "medium_project"],
         tightness: 3,
         updated_at: now,

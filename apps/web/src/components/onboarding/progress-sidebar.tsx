@@ -5,6 +5,7 @@ import { User, Briefcase, GraduationCap, Code, DollarSign, Linkedin } from "luci
 import { EXPERIENCE_LEVEL_LABELS } from "@/lib/onboarding/constants"
 import { StepIndicator } from "./step-indicator"
 import type { CollectedData } from "@/lib/onboarding/schema"
+import { isSkipped } from "@/lib/onboarding/schema"
 
 type ProgressSidebarProps = {
   collectedData: CollectedData
@@ -26,7 +27,8 @@ function DataRow({ label, value, icon: Icon }: { label: string; value: string | 
   )
 }
 
-function formatRate(min: number | null, max: number | null, currency: string | null): string | null {
+function formatRate(min: number | "skipped" | null, max: number | "skipped" | null, currency: string | null): string | null {
+  if (isSkipped(min) || isSkipped(max)) return "Skipped"
   if (min == null && max == null) return null
   const c = currency ?? "USD"
   if (min != null && max != null) return `${c} ${min}-${max}/hr`
@@ -38,23 +40,27 @@ export function ProgressSidebar({ collectedData }: ProgressSidebarProps) {
   const data = collectedData
 
   const skillsText = useMemo(() => {
+    if (isSkipped(data.skills)) return "Skipped"
     if (!data.skills || data.skills.length === 0) return null
-    return data.skills.map((s) => s.name).join(", ")
+    return data.skills.map((s: { name: string }) => s.name).join(", ")
   }, [data.skills])
 
   const experienceText = useMemo(() => {
+    if (isSkipped(data.experiences)) return "Skipped"
     if (!data.experiences || data.experiences.length === 0) return null
-    return data.experiences.map((e) => e.title + (e.company ? ` at ${e.company}` : "")).join("; ")
+    return data.experiences.map((e: { title: string; company: string | null }) => e.title + (e.company ? ` at ${e.company}` : "")).join("; ")
   }, [data.experiences])
 
   const educationText = useMemo(() => {
+    if (isSkipped(data.educations)) return "Skipped"
     if (!data.educations || data.educations.length === 0) return null
-    return data.educations.map((e) => e.degree ? `${e.degree} - ${e.school}` : e.school).join("; ")
+    return data.educations.map((e: { degree: string | null; school: string }) => e.degree ? `${e.degree} - ${e.school}` : e.school).join("; ")
   }, [data.educations])
 
   const engagementText = useMemo(() => {
+    if (isSkipped(data.engagementTypes)) return "Skipped"
     if (!data.engagementTypes || data.engagementTypes.length === 0) return null
-    return data.engagementTypes.map((t) => t === "full_time" ? "Full-time" : "Part-time").join(", ")
+    return data.engagementTypes.map((t: string) => t === "full_time" ? "Full-time" : "Part-time").join(", ")
   }, [data.engagementTypes])
 
   return (
@@ -75,7 +81,7 @@ export function ProgressSidebar({ collectedData }: ProgressSidebarProps) {
 
         <DataRow
           label="Experience Level"
-          value={data.experienceLevel ? (EXPERIENCE_LEVEL_LABELS[data.experienceLevel] ?? data.experienceLevel) : null}
+          value={isSkipped(data.experienceLevel) ? "Skipped" : data.experienceLevel ? (EXPERIENCE_LEVEL_LABELS[data.experienceLevel] ?? data.experienceLevel) : null}
           icon={Briefcase}
         />
 

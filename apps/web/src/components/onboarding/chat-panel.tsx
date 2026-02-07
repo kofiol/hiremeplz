@@ -25,12 +25,47 @@ import { ArrowLeft, LoaderIcon, Mic, Square } from "lucide-react"
 import { useVoiceRecording } from "@/hooks/use-voice-recording"
 import { OnboardingVoiceBar } from "@/components/onboarding-voice-bar"
 import { ChatMessageItem } from "./chat-message"
-import { ChatProgress } from "./chat-progress"
-import { StreamingMessage } from "./streaming-message"
 import { SuggestedReplies } from "./suggested-replies"
 import { FinishOnboarding } from "./analysis-results"
 import { SkillSelector } from "./skill-selector"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import { ONBOARDING_STEPS } from "@/lib/onboarding/constants"
+import { countCompletedSteps } from "@/lib/onboarding/data-status"
+import { useFocusMode } from "@/hooks/use-focus-mode"
 import type { ChatMessage, CollectedData, InputHint } from "@/lib/onboarding/schema"
+
+function ProgressBadge({ collectedData }: { collectedData: CollectedData }) {
+  const completed = countCompletedSteps(collectedData)
+  const total = ONBOARDING_STEPS.length
+  const step = Math.min(completed + 1, total)
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-border/30 bg-accent px-3 py-1.5 text-sm text-accent-foreground w-fit">
+      <span>{step}/{total}</span>
+      <div className="flex gap-0.5">
+        {Array.from({ length: total }, (_, i) => (
+          <div
+            key={i}
+            className={`h-1 w-3 rounded-full transition-colors ${
+              i < step ? "bg-primary" : "bg-muted-foreground/20"
+            }`}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function StreamingContent({ content }: { content: string }) {
+  return (
+    <>
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+        {content}
+      </ReactMarkdown>
+      <span className="ml-1 inline-block h-4 w-0.5 animate-pulse bg-foreground/50" />
+    </>
+  )
+}
 
 type ChatPanelProps = {
   messages: ChatMessage[]
@@ -39,6 +74,7 @@ type ChatPanelProps = {
   isLoading: boolean
   isStreaming: boolean
   streamingContent: string
+  streamThinkingDuration: number | undefined
   error: string | null
   activeToolCall: { name: string; status: string; elapsed?: number } | null
   toolCallElapsed: number
@@ -48,7 +84,7 @@ type ChatPanelProps = {
   reasoningPhase: "thinking" | "evaluating"
   accessToken: string | null
   onSendMessage: (text: string) => void
-  onEditMessage: (messageId: string, newText: string) => void
+  onRevertToMessage: (messageId: string) => void
   onStopGeneration: () => void
   onStartConversation: () => void
   setError: (error: string | null) => void
@@ -65,6 +101,7 @@ export function ChatPanel({
   isLoading,
   isStreaming,
   streamingContent,
+  streamThinkingDuration,
   error,
   activeToolCall,
   toolCallElapsed,
@@ -74,7 +111,7 @@ export function ChatPanel({
   reasoningPhase,
   accessToken,
   onSendMessage,
-  onEditMessage,
+  onRevertToMessage,
   onStopGeneration,
   onStartConversation,
   setError,
@@ -110,11 +147,27 @@ export function ChatPanel({
     [onSendMessage]
   )
 
+  // Delay "Thinking..." so it doesn't flash for fast responses
+  const [showThinking, setShowThinking] = useState(false)
+  const isWaiting = isLoading || isStreaming
+  useEffect(() => {
+    if (!isWaiting) {
+      setShowThinking(false)
+      return
+    }
+    const id = setTimeout(() => setShowThinking(true), 400)
+    return () => clearTimeout(id)
+  }, [isWaiting])
+
   const hasAnalysis = messages.some((m) => m.profileAnalysis)
   const isEditable = !isLoading && !isStreaming && voiceRecording.status === "idle"
 
   const showSkillSelector = inputHint.type === "skill_selector" && !isLoading && !isStreaming && !hasAnalysis
   const activeSuggestions = inputHint.type === "suggestions" ? inputHint.suggestions : []
+
+  // Focus mode — dim messages when waiting for user input (not during analysis)
+  const [focusEnabled, , focusOpacity] = useFocusMode()
+  const shouldDim = focusEnabled && !isWaiting && !hasAnalysis && messages.length > 0
 
   return (
     <motion.div
@@ -124,7 +177,10 @@ export function ChatPanel({
       transition={{ duration: 0.3 }}
       className="flex flex-1 flex-col min-h-0 overflow-hidden"
     >
-      <Conversation className="flex-1 min-h-0">
+      <Conversation
+        className="flex-1 min-h-0 transition-opacity duration-500"
+        style={shouldDim ? { opacity: 1 - focusOpacity / 100 } : undefined}
+      >
         <ConversationContent className="mx-auto w-full max-w-3xl pt-4 pb-4">
           {/* Back button */}
           {onBack && (
@@ -145,19 +201,31 @@ export function ChatPanel({
               key={message.id}
               message={message}
               isEditable={isEditable}
-              onEdit={onEditMessage}
-              isEditDisabled={isLoading || isStreaming}
+              onRevert={onRevertToMessage}
             />
           ))}
 
-          {messages.length > 0 && !hasAnalysis && (
-            <div className="my-3 flex justify-start pl-10">
-              <ChatProgress collectedData={collectedData} />
-            </div>
-          )}
-
-          {isStreaming && streamingContent && (
-            <StreamingMessage content={streamingContent} />
+          {showThinking && !activeToolCall && !isReasoning && (
+            <Message from="assistant" hideAvatar>
+              <MessageContent>
+                <div className="space-y-3">
+                  {!hasAnalysis && (
+                    <ProgressBadge collectedData={collectedData} />
+                  )}
+                  <Reasoning
+                    isStreaming={!streamThinkingDuration}
+                    content=""
+                    duration={streamThinkingDuration}
+                    phase="thinking"
+                  />
+                  {isStreaming && streamingContent && (
+                    <div className="prose prose-base max-w-none text-foreground">
+                      <StreamingContent content={streamingContent} />
+                    </div>
+                  )}
+                </div>
+              </MessageContent>
+            </Message>
           )}
 
           {activeToolCall && (
@@ -170,6 +238,9 @@ export function ChatPanel({
                     {toolCallElapsed > 0 ? ` (${toolCallElapsed}s)` : "..."}
                   </span>
                 </div>
+                <p className="mt-2 text-xs text-yellow-500/80">
+                  This usually takes 30–60 seconds, but can take up to 3 minutes.
+                </p>
               </MessageContent>
             </Message>
           )}
@@ -183,20 +254,6 @@ export function ChatPanel({
                   duration={reasoningDuration}
                   phase={reasoningPhase}
                 />
-              </MessageContent>
-            </Message>
-          )}
-
-          {isLoading && !isStreaming && (
-            <Message from="assistant" hideAvatar>
-              <MessageContent>
-                <div className="flex h-8 items-center">
-                  <div className="flex items-center gap-1 translate-y-[1px]">
-                    <span className="size-2 animate-bounce rounded-full bg-muted-foreground/50 [animation-delay:-0.3s]" />
-                    <span className="size-2 animate-bounce rounded-full bg-muted-foreground/50 [animation-delay:-0.15s]" />
-                    <span className="size-2 animate-bounce rounded-full bg-muted-foreground/50" />
-                  </div>
-                </div>
               </MessageContent>
             </Message>
           )}
