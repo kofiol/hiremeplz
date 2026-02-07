@@ -197,7 +197,7 @@ export type SSEEvent =
   | { type: "tool_call"; name: string; status: "started" | "completed" | "failed" }
   | { type: "tool_status"; elapsed: number }
   | { type: "saved_fields"; fields: SavedField[] }
-  | { type: "final"; collectedData: Partial<CollectedData>; isComplete: boolean; inputHint?: InputHint }
+  | { type: "final"; collectedData: Partial<CollectedData>; isComplete: boolean; inputHint?: InputHint; conversationId?: string }
   | { type: "analysis_started" }
   | { type: "reasoning_started" }
   | { type: "reasoning_chunk"; content: string }
@@ -205,6 +205,8 @@ export type SSEEvent =
   | { type: "reasoning_completed"; duration: number }
   | { type: "profile_analysis" } & ProfileAnalysis
   | { type: "analysis_error"; message: string }
+  | { type: "tool_event"; toolName: string; status: string }
+  | { type: "agent_updated"; agentName: string }
   | { type: "error"; message: string }
 
 // ============================================================================
@@ -221,6 +223,7 @@ export const ChatRequestSchema = z.object({
   ),
   collectedData: CollectedDataSchema.partial(),
   stream: z.boolean().optional().default(false),
+  conversationId: z.string().uuid().optional(),
 })
 
 // ============================================================================

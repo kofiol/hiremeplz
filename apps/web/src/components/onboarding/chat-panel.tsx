@@ -25,6 +25,7 @@ import { ArrowLeft, LoaderIcon, Mic, Square } from "lucide-react"
 import { useVoiceRecording } from "@/hooks/use-voice-recording"
 import { OnboardingVoiceBar } from "@/components/onboarding-voice-bar"
 import { ChatMessageItem } from "./chat-message"
+import { ChatProgress } from "./chat-progress"
 import { StreamingMessage } from "./streaming-message"
 import { SuggestedReplies } from "./suggested-replies"
 import { FinishOnboarding } from "./analysis-results"
@@ -148,6 +149,12 @@ export function ChatPanel({
               isEditDisabled={isLoading || isStreaming}
             />
           ))}
+
+          {messages.length > 0 && !hasAnalysis && (
+            <div className="my-3 flex justify-start pl-10">
+              <ChatProgress collectedData={collectedData} />
+            </div>
+          )}
 
           {isStreaming && streamingContent && (
             <StreamingMessage content={streamingContent} />

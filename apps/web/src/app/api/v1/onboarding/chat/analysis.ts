@@ -1,10 +1,12 @@
-import { Agent, run } from "@openai/agents"
+import { Agent, run, OutputGuardrailTripwireTriggered, type OutputGuardrail } from "@openai/agents"
 import type { CollectedData, ProfileAnalysis } from "@/lib/onboarding/schema"
 import { ProfileAnalysisSchema, ProfileAnalysisJsonSchema } from "@/lib/onboarding/schema"
 import { EXPERIENCE_LEVEL_LABELS } from "@/lib/onboarding/constants"
 import { PROFILE_ANALYSIS_INSTRUCTIONS } from "./agent"
 import { getSupabaseAdmin } from "@/lib/auth.server"
 import type { SSEEmitter } from "./streaming"
+import { analysisScopeGuardrail } from "./guardrails"
+import { getActivePromptVersion } from "./conversation.server"
 
 // ============================================================================
 // Profile Analysis
@@ -14,9 +16,16 @@ export async function runProfileAnalysis(
   emit: SSEEmitter,
   collectedData: Partial<CollectedData>,
   authContext: { userId: string; teamId: string } | null,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  conversationId?: string | null
 ): Promise<void> {
   emit({ type: "analysis_started" })
+
+  // Check for active prompt version
+  const promptVersion = await getActivePromptVersion("onboarding", "Profile Analysis")
+  const analysisInstructions = promptVersion?.instructions ?? PROFILE_ANALYSIS_INSTRUCTIONS
+  const analysisModel = promptVersion?.model ?? "gpt-5.1"
+  const analysisModelSettings = promptVersion?.modelSettings ?? { reasoning_effort: "high" }
 
   const prompt = `
 Analyze this freelancer profile and provide comprehensive feedback:
@@ -29,31 +38,62 @@ Include rate analysis comparing their current rate vs dream rate.`
 
   const analysisAgent = new Agent({
     name: "Profile Analyst",
-    instructions: PROFILE_ANALYSIS_INSTRUCTIONS,
-    model: "gpt-5.1",
-    modelSettings: { reasoning_effort: "high" } as Record<string, unknown>,
+    instructions: analysisInstructions,
+    model: analysisModel,
+    modelSettings: analysisModelSettings as Record<string, unknown>,
     outputType: ProfileAnalysisJsonSchema,
+    outputGuardrails: [analysisScopeGuardrail as unknown as OutputGuardrail<typeof ProfileAnalysisJsonSchema>],
   })
 
   const reasoningStartTime = Date.now()
   emit({ type: "reasoning_started" })
 
-  const analysisResult = await run(analysisAgent, prompt, { stream: true })
-  const textStream = analysisResult.toTextStream({
-    compatibleWithNodeStreams: false,
-  })
+  let analysisResult
+  try {
+    analysisResult = await run(analysisAgent, prompt, { stream: true })
+    const textStream = analysisResult.toTextStream({
+      compatibleWithNodeStreams: false,
+    })
 
-  for await (const chunk of textStream) {
-    if (signal?.aborted) break
-    if (chunk) {
-      emit({ type: "reasoning_chunk", content: chunk })
+    for await (const chunk of textStream) {
+      if (signal?.aborted) break
+      if (chunk) {
+        emit({ type: "reasoning_chunk", content: chunk })
+      }
+    }
+
+    if (signal?.aborted) return
+
+    emit({ type: "reasoning_evaluating" })
+    await analysisResult.completed
+  } catch (err) {
+    if (err instanceof OutputGuardrailTripwireTriggered) {
+      console.warn("[analysis] Scope guardrail tripped, retrying without guardrail")
+      // Retry without the scope guardrail — the improved prompt is the primary control
+      const retryAgent = new Agent({
+        name: "Profile Analyst",
+        instructions: analysisInstructions,
+        model: analysisModel,
+        modelSettings: analysisModelSettings as Record<string, unknown>,
+        outputType: ProfileAnalysisJsonSchema,
+      })
+      analysisResult = await run(retryAgent, prompt, { stream: true })
+      const retryStream = analysisResult.toTextStream({
+        compatibleWithNodeStreams: false,
+      })
+      for await (const chunk of retryStream) {
+        if (signal?.aborted) break
+        if (chunk) {
+          emit({ type: "reasoning_chunk", content: chunk })
+        }
+      }
+      if (signal?.aborted) return
+      emit({ type: "reasoning_evaluating" })
+      await analysisResult.completed
+    } else {
+      throw err
     }
   }
-
-  if (signal?.aborted) return
-
-  emit({ type: "reasoning_evaluating" })
-  await analysisResult.completed
 
   const reasoningDuration = Math.round(
     (Date.now() - reasoningStartTime) / 1000
@@ -76,7 +116,7 @@ Include rate analysis comparing their current rate vs dream rate.`
 
     if (authContext) {
       try {
-        await persistOnboardingComplete(authContext, collectedData, analysis)
+        await persistOnboardingComplete(authContext, collectedData, analysis, conversationId)
       } catch (persistError) {
         console.error("Failed to persist onboarding data:", persistError)
       }
@@ -146,7 +186,8 @@ function generateAbout(data: Partial<CollectedData>): string {
 export async function persistOnboardingComplete(
   authContext: { userId: string; teamId: string },
   collectedData: Partial<CollectedData>,
-  analysis: ProfileAnalysis
+  analysis: ProfileAnalysis,
+  conversationId?: string | null
 ) {
   const supabase = getSupabaseAdmin()
   const { userId, teamId } = authContext
@@ -260,5 +301,6 @@ export async function persistOnboardingComplete(
     strengths: analysis.strengths,
     improvements: analysis.improvements,
     detailed_feedback: analysis.detailedFeedback,
+    conversation_id: conversationId ?? null,
   })
 }

@@ -31,13 +31,18 @@ export function createSaveProfileDataTool(ctx: OnboardingToolContext) {
 
 FIELD GUIDE (use the correct field for each data type):
 - fullName: User's name (e.g., "John Smith")
-- skills: Technical skills/technologies (e.g., JavaScript, React, AWS) — array of {name: string}
+- skills: Technical skills/technologies (e.g., JavaScript, React, AWS) — array of {name: string}. Include context when provided, e.g. "React (5 years, primary)" as the name.
 - experiences: Work history — array of {title, company, startDate, endDate, highlights}
 - educations: Schools/degrees — array of {school, degree, field, startYear, endYear}
 - experienceLevel: Career level (intern_new_grad, entry, mid, senior, lead, director)
 - currentRateMin/Max: Current hourly rate range (numbers only)
 - dreamRateMin/Max: Target hourly rate range (numbers only)
 - engagementTypes: Work style array (["full_time"], ["part_time"], or both)
+
+CRITICAL: The 'highlights' field on experiences is the MOST IMPORTANT field for analysis scoring.
+Save accomplishments, tech stack used, scale/impact (team size, users, revenue), and outcomes.
+Example highlights: "Built real-time analytics dashboard serving 50K users using React + D3.js. Led team of 4. Reduced page load by 60%."
+Do NOT leave highlights empty if the user provided any detail about what they did.
 
 CRITICAL RULES:
 - ONLY save data the user EXPLICITLY stated in their message. NEVER infer, guess, or fabricate values for fields the user did not mention.

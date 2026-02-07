@@ -51,13 +51,37 @@ export async function streamAgentText(
 ): Promise<string> {
   let text = ""
   const result = await run(agent, prompt, { stream: true })
-  const textStream = result.toTextStream({
-    compatibleWithNodeStreams: false,
-  })
-  for await (const chunk of textStream) {
-    text += chunk
-    emit({ type: "text", content: chunk })
+
+  // Use full SDK event iterator for richer events
+  for await (const event of result) {
+    if (event.type === "raw_model_stream_event") {
+      const delta = event.data
+      // Extract text deltas from the raw model stream
+      if (delta.type === "output_text_delta") {
+        const chunk = delta.delta
+        text += chunk
+        emit({ type: "text", content: chunk })
+      }
+    } else if (event.type === "run_item_stream_event") {
+      // Tool call output events (tool execution completed)
+      if (event.item?.type === "tool_call_output_item" && event.name === "tool_output") {
+        const rawItem = event.item.rawItem
+        const toolName = rawItem && "name" in rawItem ? (rawItem as { name: string }).name : "unknown"
+        emit({
+          type: "tool_event",
+          toolName,
+          status: "completed",
+        })
+      }
+    } else if (event.type === "agent_updated_stream_event") {
+      // Agent handoff events (future use)
+      emit({
+        type: "agent_updated",
+        agentName: event.agent?.name ?? "unknown",
+      })
+    }
   }
+
   await result.completed
   return text
 }

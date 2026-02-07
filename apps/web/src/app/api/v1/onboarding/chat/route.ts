@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { Agent, run } from "@openai/agents"
+import { Agent, run, InputGuardrailTripwireTriggered } from "@openai/agents"
 import {
   triggerLinkedInScrape as triggerScrapeUtil,
   getLinkedInScrapeStatus as getScrapeStatusUtil,
@@ -15,6 +15,8 @@ import { createSaveProfileDataTool, createTriggerAnalysisTool, createSetInputHin
 import type { OnboardingToolContext } from "./tools"
 import { createConversationalAgent, createFillerAgent, CONVERSATIONAL_AGENT_INSTRUCTIONS } from "./agent"
 import { runProfileAnalysis } from "./analysis"
+import { contentModerationGuardrail } from "./guardrails"
+import { createConversation, saveMessage, completeConversation, getActivePromptVersion } from "./conversation.server"
 
 // ============================================================================
 // LinkedIn URL Detection
@@ -78,22 +80,24 @@ function createPrompt(
   const isLastStep = missing.length === 1
 
   return `
-## PROGRESS: Step ${adjustedFilledCount + 1} of ${progress.total} (${adjustedPercent}% complete)${isLastStep ? " — THIS IS THE LAST QUESTION" : ""}
+[INTERNAL CONTEXT — do NOT include any of these headers, progress numbers, or step counts in your response]
 
-## ALREADY COLLECTED:
+Progress: ${adjustedFilledCount} of ${progress.total} complete (${adjustedPercent}%)${isLastStep ? " — last question" : ""}
+
+Already collected:
 ${filled.length > 0 ? filled.join("\n") : "Nothing yet — this is the first question"}
 
-## STILL NEEDED:
+Still needed:
 ${stillNeeded}
 
-## Conversation so far:
+Conversation so far:
 ${conversationContext}
 
-## User's new message:
+User's new message:
 ${message}
-${extraContext ? `\n## Additional context:\n${extraContext}` : ""}
+${extraContext ? `\nAdditional context:\n${extraContext}` : ""}
 
-Remember: Save any data the user provided, then ask about item #1 in STILL NEEDED (or call trigger_profile_analysis if ALL DONE).`
+Remember: Save any data the user provided, then ask about item #1 in still needed (or call trigger_profile_analysis if ALL DONE).`
 }
 
 // ============================================================================
@@ -196,7 +200,7 @@ async function handleLinkedInFlow(
     const summaryAgent = new Agent({
       name: "Conversational Assistant",
       instructions: CONVERSATIONAL_AGENT_INSTRUCTIONS,
-      model: "gpt-4.1-nano",
+      model: "gpt-5-mini",
       tools: [saveProfileData, triggerAnalysis, setInputHint],
     })
 
@@ -272,7 +276,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { message, conversationHistory, collectedData, stream } = parsed.data
+    const { message, conversationHistory, collectedData, stream, conversationId: incomingConversationId } = parsed.data
 
     if (!process.env.OPENAI_API_KEY) {
       console.error("OPENAI_API_KEY is not configured in environment")
@@ -303,18 +307,70 @@ export async function POST(request: NextRequest) {
 
     if (stream) {
       return createSSEResponse(async (emit) => {
+        // Check for active prompt version
+        const promptVersion = await getActivePromptVersion("onboarding", "Conversational Agent")
+        const agentModel = promptVersion?.model ?? "gpt-5-mini"
+
+        // Create or reuse conversation
+        let conversationId = incomingConversationId ?? null
+        if (!conversationId && authContext) {
+          conversationId = await createConversation({
+            teamId: authContext.teamId,
+            userId: authContext.userId,
+            agentType: "onboarding",
+            promptVersionId: promptVersion?.id,
+            model: agentModel,
+          })
+        }
+
+        // Save user message
+        if (conversationId) {
+          await saveMessage({
+            conversationId,
+            role: "user",
+            content: message,
+          })
+        }
+
+        let responseText = ""
+
         if (linkedInUrl) {
-          await handleLinkedInFlow(emit, linkedInUrl, ctx, conversationHistory, conversationContext, message)
+          responseText = await handleLinkedInFlow(emit, linkedInUrl, ctx, conversationHistory, conversationContext, message)
         } else {
           const saveProfileData = createSaveProfileDataTool(ctx)
           const triggerAnalysis = createTriggerAnalysisTool(ctx)
           const setInputHint = createSetInputHintTool(ctx)
-          const agent = createConversationalAgent([saveProfileData, triggerAnalysis, setInputHint])
-          await streamAgentText(
-            agent,
-            createPrompt(ctx.collectedData, conversationContext, message, conversationHistory),
-            emit
-          )
+          const agent = createConversationalAgent([saveProfileData, triggerAnalysis, setInputHint], {
+            inputGuardrails: [contentModerationGuardrail],
+            ...(promptVersion ? { instructions: promptVersion.instructions, model: promptVersion.model } : {}),
+          })
+          try {
+            responseText = await streamAgentText(
+              agent,
+              createPrompt(ctx.collectedData, conversationContext, message, conversationHistory),
+              emit
+            )
+          } catch (err) {
+            if (err instanceof InputGuardrailTripwireTriggered) {
+              responseText = "I'd love to help, but that message doesn't seem related to setting up your profile. Could you rephrase it? I'm here to learn about your skills, experience, and career goals."
+              emit({
+                type: "text",
+                content: responseText,
+              })
+            } else {
+              throw err
+            }
+          }
+        }
+
+        // Save assistant message
+        if (conversationId) {
+          await saveMessage({
+            conversationId,
+            role: "assistant",
+            content: responseText,
+            savedFields: ctx.lastSavedFields.length > 0 ? ctx.lastSavedFields : undefined,
+          })
         }
 
         // Emit saved fields if any were saved
@@ -330,12 +386,16 @@ export async function POST(request: NextRequest) {
           collectedData: ctx.collectedData,
           isComplete: ctx.analysisRequested,
           inputHint: ctx.inputHint ?? DEFAULT_INPUT_HINT,
+          conversationId: conversationId ?? undefined,
         })
 
         // Profile Analysis (when triggered by tool)
         if (ctx.analysisRequested && !request.signal.aborted) {
+          if (conversationId) {
+            await completeConversation(conversationId)
+          }
           try {
-            await runProfileAnalysis(emit, ctx.collectedData, authContext, request.signal)
+            await runProfileAnalysis(emit, ctx.collectedData, authContext, request.signal, conversationId)
           } catch (analysisError) {
             console.error("Profile analysis error:", analysisError)
             emit({
