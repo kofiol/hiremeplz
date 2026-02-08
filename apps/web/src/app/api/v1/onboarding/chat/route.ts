@@ -261,7 +261,7 @@ async function handleLinkedInFlow(
         conversationContext,
         message,
         conversationHistory,
-        `LinkedIn scrape failed: "${scrapeResult.error}". Apologize briefly and ask them to try again or set up manually.`
+        `LinkedIn import failed due to a temporary issue. Apologize briefly and ask them to try again later or enter details manually.`
       ),
       emit
     )
