@@ -15,7 +15,6 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { JobFeed } from "@/components/jobs/job-feed"
 import { JobFilterSidebar } from "@/components/jobs/job-filter-sidebar"
 import { JobDetailDrawer } from "@/components/jobs/job-detail-drawer"
-import { MOCK_JOBS } from "@/lib/jobs/mock-data"
 import { DEFAULT_FILTERS } from "@/lib/jobs/types"
 import { filterJobs, sortJobs, getAllSkills } from "@/lib/jobs/utils"
 import type { Job, JobFilters, SortOption } from "@/lib/jobs/types"
@@ -59,17 +58,11 @@ export default function JobsPage() {
   const [visibleCount, setVisibleCount] = React.useState(PAGE_SIZE)
   const [selectedJob, setSelectedJob] = React.useState<Job | null>(null)
   const [drawerOpen, setDrawerOpen] = React.useState(false)
-  const [isLoading, setIsLoading] = React.useState(true)
-  const [jobs, setJobs] = React.useState<Job[]>(MOCK_JOBS)
+  const [isLoading, setIsLoading] = React.useState(false)
+  const [jobs, setJobs] = React.useState<Job[]>([])
 
-  // Simulate initial loading
-  React.useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 800)
-    return () => clearTimeout(timer)
-  }, [])
-
-  // All available skills for the filter
-  const allSkills = React.useMemo(() => getAllSkills(MOCK_JOBS), [])
+  // All available skills for the filter (derived from current jobs)
+  const allSkills = React.useMemo(() => getAllSkills(jobs), [jobs])
 
   // Apply filters and sorting
   const processedJobs = React.useMemo(() => {
