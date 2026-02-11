@@ -92,7 +92,7 @@ export function JobCard({ job, onSelect, onToggleBookmark }: JobCardProps) {
           </div>
 
           {/* Right: score + AI summary + icons */}
-          <div className="shrink-0 w-64 flex flex-col items-end gap-1.5 text-right">
+          <div className="shrink-0 w-72 xl:w-80 flex flex-col items-end gap-1.5 text-right">
             {job.ranking && (
               <ScoreBadge score={job.ranking.score} size="lg" />
             )}
