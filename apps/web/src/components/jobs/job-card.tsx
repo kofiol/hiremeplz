@@ -81,23 +81,33 @@ export function JobCard({ job, onSelect, onToggleBookmark }: JobCardProps) {
             )}
           </div>
 
-          {/* Footer: budget, time, platform, bookmark */}
-          <div className="flex items-center justify-between pt-0.5">
+          {/* Footer: budget, time */}
+          <div className="flex items-center pt-0.5">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span className="font-medium text-foreground/80">{formatBudget(job)}</span>
               <span className="text-border">|</span>
               <span>{formatRelativeTime(job.posted_at)}</span>
             </div>
+          </div>
+          </div>
 
-            <div className="flex items-center gap-1">
-              {/* Platform icon */}
+          {/* Right: score + AI summary + icons */}
+          <div className="shrink-0 w-64 flex flex-col items-end gap-1.5 text-right">
+            {job.ranking && (
+              <ScoreBadge score={job.ranking.score} size="lg" />
+            )}
+            {job.ai_summary && (
+              <p className="text-[11px] text-muted-foreground leading-snug line-clamp-4">
+                {job.ai_summary}
+              </p>
+            )}
+            {/* Platform + bookmark */}
+            <div className="flex items-center gap-1 mt-auto">
               {job.platform === "linkedin" ? (
                 <Linkedin className="size-3.5 text-muted-foreground" />
               ) : (
                 <UpworkIcon className="size-3.5 text-muted-foreground" />
               )}
-
-              {/* Bookmark */}
               <Button
                 variant="ghost"
                 size="icon"
@@ -118,19 +128,6 @@ export function JobCard({ job, onSelect, onToggleBookmark }: JobCardProps) {
               </Button>
             </div>
           </div>
-          </div>
-
-          {/* Right: score + AI summary */}
-          {job.ranking && (
-            <div className="shrink-0 w-44 flex flex-col items-end gap-1.5 text-right">
-              <ScoreBadge score={job.ranking.score} size="lg" />
-              {job.ai_summary && (
-                <p className="text-[11px] text-muted-foreground leading-snug line-clamp-4">
-                  {job.ai_summary}
-                </p>
-              )}
-            </div>
-          )}
         </div>
       </div>
     </button>
