@@ -7,7 +7,6 @@
 ---
 
 ## Overview
-
 Each user gets a personalized job pool. When triggered, an AI agent reads the user's profile and generates optimal BrightData search queries. Results are scraped, normalized, deduplicated, and stored scoped to the user's team.
 
 ```
@@ -25,7 +24,6 @@ Supabase (jobs + job_sources + agent_runs, all team-scoped)
 ---
 
 ## Components
-
 ### 1. AI Query Builder Agent
 
 **File:** `apps/web/src/lib/agents/job-query-agent.ts`
